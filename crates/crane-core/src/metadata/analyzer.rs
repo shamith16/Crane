@@ -115,10 +115,18 @@ fn extract_filename_from_url(parsed: &url::Url) -> String {
     match urlencoding::decode(segment) {
         Ok(decoded) => {
             let name = decoded.into_owned();
-            if name.is_empty() { "download".to_string() } else { name }
+            if name.is_empty() {
+                "download".to_string()
+            } else {
+                name
+            }
         }
         Err(_) => {
-            if segment.is_empty() { "download".to_string() } else { segment.to_string() }
+            if segment.is_empty() {
+                "download".to_string()
+            } else {
+                segment.to_string()
+            }
         }
     }
 }
@@ -206,9 +214,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("HEAD"))
             .and(path("/stream"))
-            .respond_with(
-                ResponseTemplate::new(200).insert_header("Content-Type", "video/mp4"),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "video/mp4"))
             .mount(&server)
             .await;
 
@@ -331,8 +337,7 @@ mod tests {
         Mock::given(method("HEAD"))
             .and(path("/file.zip"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("Content-Type", "application/zip"),
+                ResponseTemplate::new(200).insert_header("Content-Type", "application/zip"),
             )
             .mount(&server)
             .await;

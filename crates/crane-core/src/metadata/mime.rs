@@ -51,8 +51,8 @@ pub fn categorize_extension(filename: &str) -> FileCategory {
         "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "odt" | "ods" | "odp"
         | "rtf" | "txt" | "csv" | "epub" | "mobi" => FileCategory::Documents,
 
-        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "flv" | "webm" | "m4v" | "mpg" | "mpeg"
-        | "3gp" | "ts" => FileCategory::Video,
+        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "flv" | "webm" | "m4v" | "mpg" | "mpeg" | "3gp"
+        | "ts" => FileCategory::Video,
 
         "mp3" | "flac" | "wav" | "aac" | "ogg" | "wma" | "m4a" | "opus" | "aiff" => {
             FileCategory::Audio
@@ -64,8 +64,8 @@ pub fn categorize_extension(filename: &str) -> FileCategory {
         "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "zst" | "lz" | "lzma" | "cab"
         | "tgz" => FileCategory::Archives,
 
-        "exe" | "msi" | "dmg" | "pkg" | "deb" | "rpm" | "appimage" | "snap" | "flatpak"
-        | "iso" | "img" => FileCategory::Software,
+        "exe" | "msi" | "dmg" | "pkg" | "deb" | "rpm" | "appimage" | "snap" | "flatpak" | "iso"
+        | "img" => FileCategory::Software,
 
         _ => FileCategory::Other,
     }
@@ -82,7 +82,10 @@ mod tests {
 
     #[test]
     fn test_mime_msword() {
-        assert_eq!(categorize_mime("application/msword"), FileCategory::Documents);
+        assert_eq!(
+            categorize_mime("application/msword"),
+            FileCategory::Documents
+        );
     }
 
     #[test]
