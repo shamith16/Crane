@@ -119,6 +119,14 @@ pub struct DownloadOptions {
     pub headers: Option<std::collections::HashMap<String, String>>,
 }
 
+/// Result returned after a successful download
+#[derive(Debug, Clone)]
+pub struct DownloadResult {
+    pub downloaded_bytes: u64,
+    pub elapsed_ms: u64,
+    pub final_path: std::path::PathBuf,
+}
+
 // ─── Error Types ────────────────────────────────────
 
 #[derive(Debug, thiserror::Error)]
