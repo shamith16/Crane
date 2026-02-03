@@ -1,7 +1,126 @@
+use crate::metadata::mime::{categorize_extension, categorize_mime};
 use crate::types::{CraneError, FileCategory, UrlAnalysis};
 
-pub async fn analyze_url(_url: &str) -> Result<UrlAnalysis, CraneError> {
-    todo!()
+const USER_AGENT: &str = "Crane/0.1.0";
+
+pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
+    let parsed = url::Url::parse(input_url)?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .build()
+        .map_err(CraneError::Network)?;
+
+    let response = client.head(input_url).send().await?;
+    let final_url = response.url().to_string();
+    let status = response.status();
+
+    if !status.is_success() {
+        return Err(CraneError::Http {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("Unknown").to_string(),
+        });
+    }
+
+    let headers = response.headers();
+
+    let total_size = headers
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+
+    let mime_type = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(';').next().unwrap_or(v).trim().to_string());
+
+    let resumable = headers
+        .get("accept-ranges")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("bytes"))
+        .unwrap_or(false);
+
+    let server = headers
+        .get("server")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string());
+
+    let filename = extract_filename_from_headers(headers)
+        .unwrap_or_else(|| extract_filename_from_url(&parsed));
+
+    let category = match &mime_type {
+        Some(mime) => {
+            let cat = categorize_mime(mime);
+            if cat == FileCategory::Other {
+                categorize_extension(&filename)
+            } else {
+                cat
+            }
+        }
+        None => categorize_extension(&filename),
+    };
+
+    Ok(UrlAnalysis {
+        url: final_url,
+        filename,
+        total_size,
+        mime_type,
+        resumable,
+        category,
+        server,
+    })
+}
+
+fn extract_filename_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    let disposition = headers.get("content-disposition")?.to_str().ok()?;
+
+    // Try filename*=UTF-8''encoded_name first (RFC 5987)
+    if let Some(encoded) = disposition
+        .split(';')
+        .map(|p| p.trim())
+        .find(|p| p.starts_with("filename*="))
+    {
+        let value = encoded.trim_start_matches("filename*=");
+        if let Some(name) = value.split("''").nth(1) {
+            if let Ok(decoded) = urlencoding::decode(name) {
+                return Some(decoded.into_owned());
+            }
+        }
+    }
+
+    // Try filename="name" or filename=name
+    if let Some(param) = disposition
+        .split(';')
+        .map(|p| p.trim())
+        .find(|p| p.starts_with("filename=") && !p.starts_with("filename*="))
+    {
+        let value = param.trim_start_matches("filename=");
+        let name = value.trim_matches('"');
+        if !name.is_empty() {
+            return Some(name.to_string());
+        }
+    }
+
+    None
+}
+
+fn extract_filename_from_url(parsed: &url::Url) -> String {
+    let path = parsed.path();
+    let segment = path.rsplit('/').next().unwrap_or("");
+
+    match urlencoding::decode(segment) {
+        Ok(decoded) => {
+            let name = decoded.into_owned();
+            if name.is_empty() { "download".to_string() } else { name }
+        }
+        Err(_) => {
+            if segment.is_empty() { "download".to_string() } else { segment.to_string() }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -139,7 +258,7 @@ mod tests {
     async fn test_filename_url_decoded() {
         let server = MockServer::start().await;
         Mock::given(method("HEAD"))
-            .and(path("/files/my%20file.pdf"))
+            .and(path("/files/my%2520file.pdf"))
             .respond_with(
                 ResponseTemplate::new(200).insert_header("Content-Type", "application/pdf"),
             )
