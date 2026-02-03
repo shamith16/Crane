@@ -1,11 +1,74 @@
 use crate::types::FileCategory;
 
-pub fn categorize_mime(_mime: &str) -> FileCategory {
-    todo!()
+pub fn categorize_mime(mime: &str) -> FileCategory {
+    let mime_lower = mime.to_lowercase();
+
+    match mime_lower.as_str() {
+        m if m.starts_with("application/pdf") => FileCategory::Documents,
+        m if m.starts_with("application/msword") => FileCategory::Documents,
+        m if m.contains("spreadsheet") || m.contains("excel") => FileCategory::Documents,
+        m if m.contains("presentation") || m.contains("powerpoint") => FileCategory::Documents,
+        m if m.contains("document") => FileCategory::Documents,
+        m if m.starts_with("text/") && !m.contains("html") => FileCategory::Documents,
+        "application/epub+zip" => FileCategory::Documents,
+        "application/rtf" => FileCategory::Documents,
+
+        m if m.starts_with("video/") => FileCategory::Video,
+        "application/x-matroska" => FileCategory::Video,
+
+        m if m.starts_with("audio/") => FileCategory::Audio,
+
+        m if m.starts_with("image/") => FileCategory::Images,
+
+        "application/zip" => FileCategory::Archives,
+        "application/x-rar-compressed" => FileCategory::Archives,
+        "application/x-7z-compressed" => FileCategory::Archives,
+        "application/gzip" | "application/x-gzip" => FileCategory::Archives,
+        "application/x-tar" => FileCategory::Archives,
+        "application/x-bzip2" => FileCategory::Archives,
+        "application/x-xz" => FileCategory::Archives,
+        "application/x-lzma" => FileCategory::Archives,
+        "application/zstd" => FileCategory::Archives,
+
+        "application/x-executable" => FileCategory::Software,
+        "application/x-msdos-program" => FileCategory::Software,
+        "application/x-msdownload" => FileCategory::Software,
+        "application/vnd.microsoft.portable-executable" => FileCategory::Software,
+        "application/x-apple-diskimage" => FileCategory::Software,
+        "application/vnd.debian.binary-package" => FileCategory::Software,
+        "application/x-rpm" => FileCategory::Software,
+        "application/x-msi" => FileCategory::Software,
+        "application/x-iso9660-image" => FileCategory::Software,
+
+        _ => FileCategory::Other,
+    }
 }
 
-pub fn categorize_extension(_filename: &str) -> FileCategory {
-    todo!()
+pub fn categorize_extension(filename: &str) -> FileCategory {
+    let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
+
+    match ext.as_str() {
+        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "odt" | "ods" | "odp"
+        | "rtf" | "txt" | "csv" | "epub" | "mobi" => FileCategory::Documents,
+
+        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "flv" | "webm" | "m4v" | "mpg" | "mpeg"
+        | "3gp" | "ts" => FileCategory::Video,
+
+        "mp3" | "flac" | "wav" | "aac" | "ogg" | "wma" | "m4a" | "opus" | "aiff" => {
+            FileCategory::Audio
+        }
+
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "svg" | "webp" | "tiff" | "ico" | "heic"
+        | "heif" | "avif" | "raw" => FileCategory::Images,
+
+        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "zst" | "lz" | "lzma" | "cab"
+        | "tgz" => FileCategory::Archives,
+
+        "exe" | "msi" | "dmg" | "pkg" | "deb" | "rpm" | "appimage" | "snap" | "flatpak"
+        | "iso" | "img" => FileCategory::Software,
+
+        _ => FileCategory::Other,
+    }
 }
 
 #[cfg(test)]
