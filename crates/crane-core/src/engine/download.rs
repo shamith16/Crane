@@ -1,14 +1,153 @@
 // Single-connection HTTP/HTTPS downloader
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+use futures_util::StreamExt;
+use tokio::io::AsyncWriteExt;
+use url::Url;
 
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
 
+#[allow(dead_code)] // Used in tests to size mock response bodies
 const CHUNK_SIZE: usize = 65_536; // 64KB
 const PROGRESS_INTERVAL_MS: u64 = 250;
 const MAX_RETRIES: u32 = 3;
 const RETRY_BACKOFF_MS: [u64; 3] = [1000, 2000, 4000];
 const USER_AGENT: &str = "Crane/0.1.0";
+
+/// Build the temporary download path by appending `.cranedownload`.
+fn temp_path(save_path: &Path) -> PathBuf {
+    let mut temp_name = save_path.as_os_str().to_os_string();
+    temp_name.push(".cranedownload");
+    PathBuf::from(temp_name)
+}
+
+/// Perform a single download attempt: send GET, stream body to temp file.
+///
+/// Returns `(downloaded_bytes, total_size)` on success, or a `CraneError`
+/// on failure. The caller is responsible for renaming the temp file.
+async fn attempt_download<F>(
+    parsed_url: &Url,
+    save_path: &Path,
+    options: &DownloadOptions,
+    on_progress: &F,
+    start_time: Instant,
+) -> Result<(u64, Option<u64>), CraneError>
+where
+    F: Fn(&DownloadProgress) + Send,
+{
+    // Build HTTP client
+    let ua = options
+        .user_agent
+        .as_deref()
+        .unwrap_or(USER_AGENT)
+        .to_string();
+    let client = reqwest::Client::builder()
+        .user_agent(ua)
+        .build()
+        .map_err(CraneError::Network)?;
+
+    // Build request
+    let mut request = client.get(parsed_url.as_str());
+
+    if let Some(ref referrer) = options.referrer {
+        request = request.header("Referer", referrer);
+    }
+    if let Some(ref cookies) = options.cookies {
+        request = request.header("Cookie", cookies);
+    }
+    if let Some(ref headers) = options.headers {
+        for (key, value) in headers {
+            request = request.header(key.as_str(), value.as_str());
+        }
+    }
+
+    // Send request
+    let response = request.send().await.map_err(CraneError::Network)?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(CraneError::Http {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("Unknown").to_string(),
+        });
+    }
+
+    let total_size = response.content_length();
+
+    // Ensure parent directory exists
+    let tmp = temp_path(save_path);
+    if let Some(parent) = tmp.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    // Stream body to temp file
+    let mut file = tokio::fs::File::create(&tmp).await?;
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_progress_time = Instant::now();
+    let mut last_speed_bytes: u64 = 0;
+    let mut last_speed_time = Instant::now();
+    let mut current_speed: f64 = 0.0;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.map_err(CraneError::Network)?;
+        file.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
+
+        // Update speed calculation every 1 second
+        let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
+        if speed_elapsed >= 1.0 {
+            current_speed = (downloaded - last_speed_bytes) as f64 / speed_elapsed;
+            last_speed_bytes = downloaded;
+            last_speed_time = Instant::now();
+        }
+
+        // Report progress at most every PROGRESS_INTERVAL_MS
+        if last_progress_time.elapsed().as_millis() >= PROGRESS_INTERVAL_MS as u128 {
+            let eta = if current_speed > 0.0 {
+                total_size.map(|total| {
+                    let remaining = total.saturating_sub(downloaded);
+                    (remaining as f64 / current_speed) as u64
+                })
+            } else {
+                None
+            };
+
+            on_progress(&DownloadProgress {
+                download_id: String::new(),
+                downloaded_size: downloaded,
+                total_size,
+                speed: current_speed,
+                eta_seconds: eta,
+                connections: vec![],
+            });
+            last_progress_time = Instant::now();
+        }
+    }
+
+    file.flush().await?;
+    drop(file);
+
+    // Final speed calculation
+    let total_elapsed = start_time.elapsed().as_secs_f64();
+    if total_elapsed > 0.0 {
+        current_speed = downloaded as f64 / total_elapsed;
+    }
+
+    // Final progress report
+    let eta = Some(0u64);
+    on_progress(&DownloadProgress {
+        download_id: String::new(),
+        downloaded_size: downloaded,
+        total_size,
+        speed: current_speed,
+        eta_seconds: eta,
+        connections: vec![],
+    });
+
+    Ok((downloaded, total_size))
+}
 
 /// Download a file from a URL to a local path using a single HTTP connection.
 ///
@@ -27,7 +166,57 @@ pub async fn download_file<F>(
 where
     F: Fn(&DownloadProgress) + Send,
 {
-    todo!()
+    // Validate URL
+    let parsed = Url::parse(url)?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
+    }
+
+    let start = Instant::now();
+    let tmp = temp_path(save_path);
+    let mut last_error: Option<CraneError> = None;
+
+    // Initial attempt + up to MAX_RETRIES retries
+    for attempt in 0..=MAX_RETRIES {
+        if attempt > 0 {
+            // Clean up temp file from previous failed attempt
+            let _ = tokio::fs::remove_file(&tmp).await;
+
+            let backoff = RETRY_BACKOFF_MS[(attempt - 1) as usize];
+            tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
+        }
+
+        match attempt_download(&parsed, save_path, options, &on_progress, start).await {
+            Ok((downloaded_bytes, _total_size)) => {
+                // Rename temp file to final path
+                tokio::fs::rename(&tmp, save_path).await?;
+
+                return Ok(DownloadResult {
+                    downloaded_bytes,
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    final_path: save_path.to_path_buf(),
+                });
+            }
+            Err(e) => {
+                // Don't retry 4xx errors or URL-level errors — they're permanent
+                let is_retryable = matches!(&e, CraneError::Http { status, .. } if *status >= 500);
+                if !is_retryable || attempt == MAX_RETRIES {
+                    // Clean up temp file on final failure
+                    let _ = tokio::fs::remove_file(&tmp).await;
+                    return Err(e);
+                }
+                last_error = Some(e);
+            }
+        }
+    }
+
+    // Should not reach here, but just in case
+    let _ = tokio::fs::remove_file(&tmp).await;
+    Err(last_error.unwrap_or_else(|| CraneError::Http {
+        status: 0,
+        message: "unknown error".to_string(),
+    }))
 }
 
 #[cfg(test)]
