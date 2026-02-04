@@ -12,8 +12,8 @@ use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult
 #[allow(dead_code)] // Used in tests to size mock response bodies
 const CHUNK_SIZE: usize = 65_536; // 64KB
 const PROGRESS_INTERVAL_MS: u64 = 250;
-const MAX_RETRIES: u32 = 3;
-const RETRY_BACKOFF_MS: [u64; 3] = [1000, 2000, 4000];
+const RETRY_BACKOFF_MS: &[u64] = &[1000, 2000, 4000];
+const MAX_RETRIES: u32 = RETRY_BACKOFF_MS.len() as u32;
 const USER_AGENT: &str = "Crane/0.1.0";
 
 /// Build the temporary download path by appending `.cranedownload`.
@@ -30,24 +30,14 @@ fn temp_path(save_path: &Path) -> PathBuf {
 async fn attempt_download<F>(
     parsed_url: &Url,
     save_path: &Path,
+    client: &reqwest::Client,
     options: &DownloadOptions,
     on_progress: &F,
     start_time: Instant,
 ) -> Result<(u64, Option<u64>), CraneError>
 where
-    F: Fn(&DownloadProgress) + Send,
+    F: Fn(&DownloadProgress) + Send + Sync,
 {
-    // Build HTTP client
-    let ua = options
-        .user_agent
-        .as_deref()
-        .unwrap_or(USER_AGENT)
-        .to_string();
-    let client = reqwest::Client::builder()
-        .user_agent(ua)
-        .build()
-        .map_err(CraneError::Network)?;
-
     // Build request
     let mut request = client.get(parsed_url.as_str());
 
@@ -126,8 +116,7 @@ where
         }
     }
 
-    file.flush().await?;
-    drop(file);
+    file.shutdown().await?;
 
     // Final speed calculation
     let total_elapsed = start_time.elapsed().as_secs_f64();
@@ -164,7 +153,7 @@ pub async fn download_file<F>(
     on_progress: F,
 ) -> Result<DownloadResult, CraneError>
 where
-    F: Fn(&DownloadProgress) + Send,
+    F: Fn(&DownloadProgress) + Send + Sync,
 {
     // Validate URL
     let parsed = Url::parse(url)?;
@@ -172,6 +161,16 @@ where
         "http" | "https" => {}
         scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
     }
+
+    let ua = options
+        .user_agent
+        .as_deref()
+        .unwrap_or(USER_AGENT)
+        .to_string();
+    let client = reqwest::Client::builder()
+        .user_agent(ua)
+        .build()
+        .map_err(CraneError::Network)?;
 
     let start = Instant::now();
     let tmp = temp_path(save_path);
@@ -187,7 +186,7 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
         }
 
-        match attempt_download(&parsed, save_path, options, &on_progress, start).await {
+        match attempt_download(&parsed, save_path, &client, options, &on_progress, start).await {
             Ok((downloaded_bytes, _total_size)) => {
                 // Rename temp file to final path
                 tokio::fs::rename(&tmp, save_path).await?;
