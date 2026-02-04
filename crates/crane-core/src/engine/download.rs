@@ -200,7 +200,11 @@ where
             }
             Err(e) => {
                 // Don't retry 4xx errors or URL-level errors — they're permanent
-                let is_retryable = matches!(&e, CraneError::Http { status, .. } if *status >= 500);
+                let is_retryable = match &e {
+                    CraneError::Http { status, .. } => *status >= 500,
+                    CraneError::Network(_) => true,
+                    _ => false,
+                };
                 if !is_retryable || attempt == MAX_RETRIES {
                     // Clean up temp file on final failure
                     let _ = tokio::fs::remove_file(&tmp).await;
@@ -672,5 +676,66 @@ mod tests {
             "temp file {temp_path:?} should not exist after successful download"
         );
         assert!(save.exists(), "final file should exist");
+    }
+
+    #[tokio::test]
+    async fn test_network_error() {
+        // Connect to a port with no listener — should fail with Network error
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("network.txt");
+
+        let err = download_file(
+            "http://127.0.0.1:1/file.txt",
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await
+        .unwrap_err();
+
+        match err {
+            CraneError::Network(_) => {} // expected
+            other => panic!("expected CraneError::Network, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_custom_cookies() {
+        let server = MockServer::start().await;
+        let body = b"cookie-test";
+
+        Mock::given(method("GET"))
+            .and(path("/cookies.txt"))
+            .and(wiremock::matchers::header(
+                "Cookie",
+                "session=abc123; theme=dark",
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.to_vec())
+                    .insert_header("Content-Length", body.len().to_string().as_str()),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("cookies.txt");
+
+        let opts = DownloadOptions {
+            cookies: Some("session=abc123; theme=dark".to_string()),
+            ..Default::default()
+        };
+
+        let result = download_file(
+            &format!("{}/cookies.txt", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
     }
 }
