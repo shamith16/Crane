@@ -1,8 +1,20 @@
 // Multi-connection HTTP/HTTPS downloader with byte-range splitting
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
 
-use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
+use futures_util::StreamExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::task::JoinSet;
+use url::Url;
+
+use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
+use crate::metadata::analyzer::analyze_url;
+use crate::types::{
+    ConnectionProgress, CraneError, DownloadOptions, DownloadProgress, DownloadResult,
+};
 
 const MIN_CHUNK_SIZE: u64 = 262_144; // 256KB
 const DEFAULT_CONNECTIONS: u32 = 8;
@@ -24,11 +36,7 @@ fn temp_dir_path(save_path: &Path) -> PathBuf {
 
 /// Compute chunk boundaries for multi-connection download.
 fn plan_chunks(total_size: u64, requested_connections: u32) -> Vec<ChunkPlan> {
-    let n = std::cmp::min(
-        requested_connections as u64,
-        total_size / MIN_CHUNK_SIZE,
-    )
-    .max(1) as u32;
+    let n = std::cmp::min(requested_connections as u64, total_size / MIN_CHUNK_SIZE).max(1) as u32;
 
     let chunk_size = total_size / n as u64;
     (0..n)
@@ -48,6 +56,114 @@ fn plan_chunks(total_size: u64, requested_connections: u32) -> Vec<ChunkPlan> {
         .collect()
 }
 
+/// Download a single chunk with retry logic.
+async fn download_chunk(
+    client: &reqwest::Client,
+    url: &str,
+    chunk: &ChunkPlan,
+    temp_dir: &Path,
+    options: &DownloadOptions,
+    counter: Arc<AtomicU64>,
+) -> Result<u64, CraneError> {
+    let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
+    let mut last_error: Option<CraneError> = None;
+
+    for attempt in 0..=MAX_RETRIES {
+        if attempt > 0 {
+            let _ = tokio::fs::remove_file(&chunk_path).await;
+            let backoff = RETRY_BACKOFF_MS[(attempt - 1) as usize];
+            tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
+        }
+
+        // Reset counter for this chunk on retry
+        counter.store(0, Ordering::Relaxed);
+
+        let mut request = client.get(url).header(
+            "Range",
+            format!("bytes={}-{}", chunk.range_start, chunk.range_end),
+        );
+
+        if let Some(ref referrer) = options.referrer {
+            request = request.header("Referer", referrer);
+        }
+        if let Some(ref cookies) = options.cookies {
+            request = request.header("Cookie", cookies);
+        }
+        if let Some(ref headers) = options.headers {
+            for (key, value) in headers {
+                request = request.header(key.as_str(), value.as_str());
+            }
+        }
+
+        let response = match request.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                let err = CraneError::Network(e);
+                if attempt == MAX_RETRIES {
+                    return Err(err);
+                }
+                last_error = Some(err);
+                continue;
+            }
+        };
+
+        let status = response.status();
+        if status.is_server_error() {
+            let err = CraneError::Http {
+                status: status.as_u16(),
+                message: status.canonical_reason().unwrap_or("Unknown").to_string(),
+            };
+            if attempt == MAX_RETRIES {
+                return Err(err);
+            }
+            last_error = Some(err);
+            continue;
+        }
+        if !status.is_success() {
+            return Err(CraneError::Http {
+                status: status.as_u16(),
+                message: status.canonical_reason().unwrap_or("Unknown").to_string(),
+            });
+        }
+
+        let mut file = tokio::fs::File::create(&chunk_path).await?;
+        let mut stream = response.bytes_stream();
+        let mut downloaded: u64 = 0;
+
+        let mut stream_err = None;
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(bytes) => {
+                    file.write_all(&bytes).await?;
+                    downloaded += bytes.len() as u64;
+                    counter.store(downloaded, Ordering::Relaxed);
+                }
+                Err(e) => {
+                    stream_err = Some(CraneError::Network(e));
+                    break;
+                }
+            }
+        }
+
+        file.shutdown().await?;
+
+        if let Some(err) = stream_err {
+            if attempt == MAX_RETRIES {
+                return Err(err);
+            }
+            last_error = Some(err);
+            continue;
+        }
+
+        return Ok(downloaded);
+    }
+
+    Err(last_error.unwrap_or_else(|| CraneError::Http {
+        status: 0,
+        message: "unknown error".to_string(),
+    }))
+}
+
 /// Download a file using multiple connections with byte-range splitting.
 ///
 /// If the server supports range requests and the file size is known,
@@ -62,7 +178,227 @@ pub async fn download<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
 {
-    todo!("will be implemented in Task 3")
+    // Validate URL
+    let parsed = Url::parse(url)?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
+    }
+
+    // Analyze URL to determine resumability and size
+    let analysis = analyze_url(url).await?;
+
+    let requested_connections = options.connections.unwrap_or(DEFAULT_CONNECTIONS);
+
+    // Check if multi-connection is eligible
+    let multi_eligible =
+        analysis.resumable && analysis.total_size.is_some() && requested_connections > 1;
+
+    if !multi_eligible {
+        return super::download::download_file(url, save_path, options, on_progress).await;
+    }
+
+    let total_size = analysis.total_size.unwrap();
+    let start_time = Instant::now();
+
+    // Plan chunks
+    let chunks = plan_chunks(total_size, requested_connections);
+    let num_chunks = chunks.len();
+
+    // Build HTTP client
+    let ua = options
+        .user_agent
+        .as_deref()
+        .unwrap_or(USER_AGENT)
+        .to_string();
+    let client = reqwest::Client::builder()
+        .user_agent(ua)
+        .build()
+        .map_err(CraneError::Network)?;
+
+    // Create temp directory
+    let temp_dir = temp_dir_path(save_path);
+    tokio::fs::create_dir_all(&temp_dir).await?;
+
+    // Create shared progress counters (one per chunk)
+    let counters: Vec<Arc<AtomicU64>> = (0..num_chunks)
+        .map(|_| Arc::new(AtomicU64::new(0)))
+        .collect();
+
+    // Wrap on_progress in Arc for sharing
+    let on_progress = Arc::new(on_progress);
+    let progress_on_progress = on_progress.clone();
+
+    // Spawn progress reporter task
+    let progress_counters: Vec<Arc<AtomicU64>> = counters.iter().map(Arc::clone).collect();
+    let progress_chunks: Vec<ChunkPlan> = chunks.clone();
+    let progress_stop = Arc::new(AtomicBool::new(false));
+    let progress_stop_clone = progress_stop.clone();
+
+    let progress_handle = tokio::spawn(async move {
+        let mut last_total: u64 = 0;
+        let mut last_speed_time = Instant::now();
+
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(PROGRESS_INTERVAL_MS)).await;
+
+            if progress_stop_clone.load(Ordering::Relaxed) {
+                break;
+            }
+
+            let mut connections = Vec::with_capacity(progress_chunks.len());
+            let mut total_downloaded: u64 = 0;
+
+            for (i, chunk) in progress_chunks.iter().enumerate() {
+                let downloaded = progress_counters[i].load(Ordering::Relaxed);
+                total_downloaded += downloaded;
+                connections.push(ConnectionProgress {
+                    connection_num: chunk.connection_num,
+                    downloaded,
+                    range_start: chunk.range_start,
+                    range_end: chunk.range_end,
+                });
+            }
+
+            let elapsed = last_speed_time.elapsed().as_secs_f64();
+            let speed = if elapsed > 0.0 {
+                (total_downloaded.saturating_sub(last_total)) as f64 / elapsed
+            } else {
+                0.0
+            };
+
+            let eta = if speed > 0.0 {
+                let remaining = total_size.saturating_sub(total_downloaded);
+                Some((remaining as f64 / speed) as u64)
+            } else {
+                None
+            };
+
+            progress_on_progress(&DownloadProgress {
+                download_id: String::new(),
+                downloaded_size: total_downloaded,
+                total_size: Some(total_size),
+                speed,
+                eta_seconds: eta,
+                connections,
+            });
+
+            last_total = total_downloaded;
+            last_speed_time = Instant::now();
+        }
+    });
+
+    // Spawn chunk download tasks
+    let mut join_set = JoinSet::new();
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        let client = client.clone();
+        let url = url.to_string();
+        let chunk = chunk.clone();
+        let temp_dir = temp_dir.clone();
+        let options = options.clone();
+        let counter = Arc::clone(&counters[i]);
+
+        join_set.spawn(async move {
+            download_chunk(&client, &url, &chunk, &temp_dir, &options, counter).await
+        });
+    }
+
+    // Collect results
+    let mut first_error: Option<CraneError> = None;
+
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(_bytes)) => {}
+            Ok(Err(e)) => {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(CraneError::Config(format!("task join error: {e}")));
+                }
+            }
+        }
+    }
+
+    // Stop progress reporter
+    progress_stop.store(true, Ordering::Relaxed);
+    let _ = progress_handle.await;
+
+    // If any task failed, clean up and return error
+    if let Some(err) = first_error {
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+        return Err(err);
+    }
+
+    // Merge chunk files into final file
+    if let Some(parent) = save_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    let mut final_file = tokio::fs::File::create(save_path).await?;
+    let mut merged_bytes: u64 = 0;
+
+    for i in 0..num_chunks {
+        let chunk_path = temp_dir.join(format!("chunk_{i}"));
+        let mut chunk_file = tokio::fs::File::open(&chunk_path).await?;
+        let mut buf = vec![0u8; 65_536];
+        loop {
+            let n = chunk_file.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            final_file.write_all(&buf[..n]).await?;
+            merged_bytes += n as u64;
+        }
+    }
+
+    final_file.shutdown().await?;
+
+    // Verify total bytes
+    if merged_bytes != total_size {
+        let _ = tokio::fs::remove_file(save_path).await;
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+        return Err(CraneError::Config(format!(
+            "merge size mismatch: expected {total_size}, got {merged_bytes}"
+        )));
+    }
+
+    // Cleanup temp directory
+    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+
+    // Final progress callback
+    let elapsed = start_time.elapsed();
+    let speed = if elapsed.as_secs_f64() > 0.0 {
+        merged_bytes as f64 / elapsed.as_secs_f64()
+    } else {
+        0.0
+    };
+
+    on_progress(&DownloadProgress {
+        download_id: String::new(),
+        downloaded_size: merged_bytes,
+        total_size: Some(total_size),
+        speed,
+        eta_seconds: Some(0),
+        connections: chunks
+            .iter()
+            .map(|c| ConnectionProgress {
+                connection_num: c.connection_num,
+                downloaded: c.range_end - c.range_start + 1,
+                range_start: c.range_start,
+                range_end: c.range_end,
+            })
+            .collect(),
+    });
+
+    Ok(DownloadResult {
+        downloaded_bytes: merged_bytes,
+        elapsed_ms: elapsed.as_millis() as u64,
+        final_path: save_path.to_path_buf(),
+    })
 }
 
 #[cfg(test)]
@@ -291,7 +627,11 @@ mod tests {
 
         // Verify: plan_chunks would give at most 2 connections for 512KB
         let chunks = plan_chunks(body.len() as u64, 8);
-        assert!(chunks.len() <= 2, "expected at most 2 chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() <= 2,
+            "expected at most 2 chunks, got {}",
+            chunks.len()
+        );
     }
 
     // ── Test 6: Connection failure aborts download ──
@@ -326,7 +666,10 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_err(), "download should fail when all connections return 500");
+        assert!(
+            result.is_err(),
+            "download should fail when all connections return 500"
+        );
         assert!(!save.exists(), "final file should not exist after failure");
     }
 
@@ -484,9 +827,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/headers.bin"))
             .and(header("X-Custom", "test-value"))
-            .respond_with(CustomRangeResponder {
-                body: body.clone(),
-            })
+            .respond_with(CustomRangeResponder { body: body.clone() })
             .mount(&server)
             .await;
 
