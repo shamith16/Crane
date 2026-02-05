@@ -36,6 +36,10 @@ fn temp_dir_path(save_path: &Path) -> PathBuf {
 
 /// Compute chunk boundaries for multi-connection download.
 fn plan_chunks(total_size: u64, requested_connections: u32) -> Vec<ChunkPlan> {
+    if total_size == 0 {
+        return vec![];
+    }
+
     let n = std::cmp::min(requested_connections as u64, total_size / MIN_CHUNK_SIZE).max(1) as u32;
 
     let chunk_size = total_size / n as u64;
@@ -78,22 +82,12 @@ async fn download_chunk(
         // Reset counter for this chunk on retry
         counter.store(0, Ordering::Relaxed);
 
-        let mut request = client.get(url).header(
+        let request = client.get(url).header(
             "Range",
             format!("bytes={}-{}", chunk.range_start, chunk.range_end),
         );
 
-        if let Some(ref referrer) = options.referrer {
-            request = request.header("Referer", referrer);
-        }
-        if let Some(ref cookies) = options.cookies {
-            request = request.header("Cookie", cookies);
-        }
-        if let Some(ref headers) = options.headers {
-            for (key, value) in headers {
-                request = request.header(key.as_str(), value.as_str());
-            }
-        }
+        let request = super::download::apply_options_headers(request, options);
 
         let response = match request.send().await {
             Ok(r) => r,
@@ -260,6 +254,8 @@ where
                 });
             }
 
+            total_downloaded = total_downloaded.max(last_total);
+
             let elapsed = last_speed_time.elapsed().as_secs_f64();
             let speed = if elapsed > 0.0 {
                 (total_downloaded.saturating_sub(last_total)) as f64 / elapsed
@@ -343,10 +339,10 @@ where
     let mut final_file = tokio::fs::File::create(save_path).await?;
     let mut merged_bytes: u64 = 0;
 
+    let mut buf = vec![0u8; 65_536];
     for i in 0..num_chunks {
         let chunk_path = temp_dir.join(format!("chunk_{i}"));
         let mut chunk_file = tokio::fs::File::open(&chunk_path).await?;
-        let mut buf = vec![0u8; 65_536];
         loop {
             let n = chunk_file.read(&mut buf).await?;
             if n == 0 {
@@ -933,7 +929,10 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_err(), "download should fail when all connections return 500");
+        assert!(
+            result.is_err(),
+            "download should fail when all connections return 500"
+        );
 
         let temp_dir = temp_dir_path(&save);
         assert!(

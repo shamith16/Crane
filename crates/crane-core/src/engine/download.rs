@@ -9,11 +9,29 @@ use url::Url;
 
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
 
-pub(crate) const CHUNK_SIZE: usize = 65_536; // 64KB
 pub(crate) const PROGRESS_INTERVAL_MS: u64 = 250;
 pub(crate) const RETRY_BACKOFF_MS: &[u64] = &[1000, 2000, 4000];
 pub(crate) const MAX_RETRIES: u32 = RETRY_BACKOFF_MS.len() as u32;
 pub(crate) const USER_AGENT: &str = "Crane/0.1.0";
+
+/// Apply DownloadOptions headers (Referer, Cookie, custom headers) to a request.
+pub(crate) fn apply_options_headers(
+    mut request: reqwest::RequestBuilder,
+    options: &DownloadOptions,
+) -> reqwest::RequestBuilder {
+    if let Some(ref referrer) = options.referrer {
+        request = request.header("Referer", referrer);
+    }
+    if let Some(ref cookies) = options.cookies {
+        request = request.header("Cookie", cookies);
+    }
+    if let Some(ref headers) = options.headers {
+        for (key, value) in headers {
+            request = request.header(key.as_str(), value.as_str());
+        }
+    }
+    request
+}
 
 /// Build the temporary download path by appending `.cranedownload`.
 fn temp_path(save_path: &Path) -> PathBuf {
@@ -38,19 +56,8 @@ where
     F: Fn(&DownloadProgress) + Send + Sync,
 {
     // Build request
-    let mut request = client.get(parsed_url.as_str());
-
-    if let Some(ref referrer) = options.referrer {
-        request = request.header("Referer", referrer);
-    }
-    if let Some(ref cookies) = options.cookies {
-        request = request.header("Cookie", cookies);
-    }
-    if let Some(ref headers) = options.headers {
-        for (key, value) in headers {
-            request = request.header(key.as_str(), value.as_str());
-        }
-    }
+    let request = client.get(parsed_url.as_str());
+    let request = apply_options_headers(request, options);
 
     // Send request
     let response = request.send().await.map_err(CraneError::Network)?;
@@ -267,7 +274,7 @@ mod tests {
     #[tokio::test]
     async fn test_progress_reporting() {
         let server = MockServer::start().await;
-        let body = vec![0xABu8; CHUNK_SIZE * 3];
+        let body = vec![0xABu8; 65_536 * 3];
 
         Mock::given(method("GET"))
             .and(path("/big.bin"))
@@ -591,7 +598,7 @@ mod tests {
     #[tokio::test]
     async fn test_progress_has_speed() {
         let server = MockServer::start().await;
-        let body = vec![0xCDu8; CHUNK_SIZE * 5];
+        let body = vec![0xCDu8; 65_536 * 5];
 
         Mock::given(method("GET"))
             .and(path("/speed.bin"))
