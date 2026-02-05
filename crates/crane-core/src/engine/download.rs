@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
@@ -51,6 +52,7 @@ async fn attempt_download<F>(
     options: &DownloadOptions,
     on_progress: &F,
     start_time: Instant,
+    cancel_token: &CancellationToken,
 ) -> Result<(u64, Option<u64>), CraneError>
 where
     F: Fn(&DownloadProgress) + Send + Sync,
@@ -86,39 +88,54 @@ where
     let mut last_speed_time = Instant::now();
     let mut current_speed: f64 = 0.0;
 
-    while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result.map_err(CraneError::Network)?;
-        file.write_all(&chunk).await?;
-        downloaded += chunk.len() as u64;
+    loop {
+        tokio::select! {
+            chunk_result = stream.next() => {
+                match chunk_result {
+                    Some(Ok(chunk)) => {
+                        file.write_all(&chunk).await?;
+                        downloaded += chunk.len() as u64;
 
-        // Update speed calculation every 1 second
-        let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
-        if speed_elapsed >= 1.0 {
-            current_speed = (downloaded - last_speed_bytes) as f64 / speed_elapsed;
-            last_speed_bytes = downloaded;
-            last_speed_time = Instant::now();
-        }
+                        // Update speed calculation every 1 second
+                        let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
+                        if speed_elapsed >= 1.0 {
+                            current_speed = (downloaded - last_speed_bytes) as f64 / speed_elapsed;
+                            last_speed_bytes = downloaded;
+                            last_speed_time = Instant::now();
+                        }
 
-        // Report progress at most every PROGRESS_INTERVAL_MS
-        if last_progress_time.elapsed().as_millis() >= PROGRESS_INTERVAL_MS as u128 {
-            let eta = if current_speed > 0.0 {
-                total_size.map(|total| {
-                    let remaining = total.saturating_sub(downloaded);
-                    (remaining as f64 / current_speed) as u64
-                })
-            } else {
-                None
-            };
+                        // Report progress at most every PROGRESS_INTERVAL_MS
+                        if last_progress_time.elapsed().as_millis() >= PROGRESS_INTERVAL_MS as u128 {
+                            let eta = if current_speed > 0.0 {
+                                total_size.map(|total| {
+                                    let remaining = total.saturating_sub(downloaded);
+                                    (remaining as f64 / current_speed) as u64
+                                })
+                            } else {
+                                None
+                            };
 
-            on_progress(&DownloadProgress {
-                download_id: String::new(),
-                downloaded_size: downloaded,
-                total_size,
-                speed: current_speed,
-                eta_seconds: eta,
-                connections: vec![],
-            });
-            last_progress_time = Instant::now();
+                            on_progress(&DownloadProgress {
+                                download_id: String::new(),
+                                downloaded_size: downloaded,
+                                total_size,
+                                speed: current_speed,
+                                eta_seconds: eta,
+                                connections: vec![],
+                            });
+                            last_progress_time = Instant::now();
+                        }
+                    }
+                    Some(Err(e)) => {
+                        return Err(CraneError::Network(e));
+                    }
+                    None => break,
+                }
+            }
+            _ = cancel_token.cancelled() => {
+                file.shutdown().await?;
+                return Ok((downloaded, total_size));
+            }
         }
     }
 
@@ -144,7 +161,8 @@ where
     Ok((downloaded, total_size))
 }
 
-/// Download a file from a URL to a local path using a single HTTP connection.
+/// Download a file from a URL to a local path using a single HTTP connection,
+/// with support for cancellation via a `CancellationToken`.
 ///
 /// Streams the response body in 64KB chunks, writing to a temporary
 /// `.cranedownload` file and renaming on success. Retries transient
@@ -152,11 +170,12 @@ where
 ///
 /// The `on_progress` callback fires at most every 250ms with current
 /// download statistics.
-pub async fn download_file<F>(
+pub(crate) async fn download_file_with_token<F>(
     url: &str,
     save_path: &Path,
     options: &DownloadOptions,
     on_progress: F,
+    cancel_token: CancellationToken,
 ) -> Result<DownloadResult, CraneError>
 where
     F: Fn(&DownloadProgress) + Send + Sync,
@@ -192,7 +211,17 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
         }
 
-        match attempt_download(&parsed, save_path, &client, options, &on_progress, start).await {
+        match attempt_download(
+            &parsed,
+            save_path,
+            &client,
+            options,
+            &on_progress,
+            start,
+            &cancel_token,
+        )
+        .await
+        {
             Ok((downloaded_bytes, _total_size)) => {
                 // Rename temp file to final path
                 tokio::fs::rename(&tmp, save_path).await?;
@@ -226,6 +255,30 @@ where
         status: 0,
         message: "unknown error".to_string(),
     }))
+}
+
+/// Download a file from a URL to a local path using a single HTTP connection.
+///
+/// Convenience wrapper around `download_file_with_token` that creates a new
+/// (uncancelled) token. Use `download_file_with_token` directly when you need
+/// cancellation support.
+pub async fn download_file<F>(
+    url: &str,
+    save_path: &Path,
+    options: &DownloadOptions,
+    on_progress: F,
+) -> Result<DownloadResult, CraneError>
+where
+    F: Fn(&DownloadProgress) + Send + Sync,
+{
+    download_file_with_token(
+        url,
+        save_path,
+        options,
+        on_progress,
+        CancellationToken::new(),
+    )
+    .await
 }
 
 #[cfg(test)]

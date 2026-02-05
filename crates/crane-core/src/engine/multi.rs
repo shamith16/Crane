@@ -195,12 +195,23 @@ where
 
     let requested_connections = options.connections.unwrap_or(DEFAULT_CONNECTIONS);
 
+    // Create cancellation token before eligibility check so it's available for
+    // both the multi-connection path and the single-connection fallback.
+    let cancel_token = CancellationToken::new();
+
     // Check if multi-connection is eligible
     let multi_eligible =
         analysis.resumable && analysis.total_size.is_some() && requested_connections > 1;
 
     if !multi_eligible {
-        return super::download::download_file(url, save_path, options, on_progress).await;
+        return super::download::download_file_with_token(
+            url,
+            save_path,
+            options,
+            on_progress,
+            cancel_token,
+        )
+        .await;
     }
 
     let total_size = analysis.total_size.unwrap();
@@ -297,7 +308,6 @@ where
 
     // Spawn chunk download tasks
     let mut join_set = JoinSet::new();
-    let cancel_token = CancellationToken::new();
 
     for (i, chunk) in chunks.iter().enumerate() {
         let client = client.clone();
