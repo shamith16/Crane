@@ -8,6 +8,7 @@ use std::time::Instant;
 use futures_util::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
@@ -68,6 +69,7 @@ async fn download_chunk(
     temp_dir: &Path,
     options: &DownloadOptions,
     counter: Arc<AtomicU64>,
+    cancel_token: CancellationToken,
 ) -> Result<u64, CraneError> {
     let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
     let mut last_error: Option<CraneError> = None;
@@ -125,16 +127,25 @@ async fn download_chunk(
         let mut downloaded: u64 = 0;
 
         let mut stream_err = None;
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(bytes) => {
-                    file.write_all(&bytes).await?;
-                    downloaded += bytes.len() as u64;
-                    counter.store(downloaded, Ordering::Relaxed);
+        loop {
+            tokio::select! {
+                chunk_result = stream.next() => {
+                    match chunk_result {
+                        Some(Ok(bytes)) => {
+                            file.write_all(&bytes).await?;
+                            downloaded += bytes.len() as u64;
+                            counter.store(downloaded, Ordering::Relaxed);
+                        }
+                        Some(Err(e)) => {
+                            stream_err = Some(CraneError::Network(e));
+                            break;
+                        }
+                        None => break,
+                    }
                 }
-                Err(e) => {
-                    stream_err = Some(CraneError::Network(e));
-                    break;
+                _ = cancel_token.cancelled() => {
+                    file.shutdown().await?;
+                    return Ok(downloaded);
                 }
             }
         }
@@ -286,6 +297,7 @@ where
 
     // Spawn chunk download tasks
     let mut join_set = JoinSet::new();
+    let cancel_token = CancellationToken::new();
 
     for (i, chunk) in chunks.iter().enumerate() {
         let client = client.clone();
@@ -294,9 +306,10 @@ where
         let temp_dir = temp_dir.clone();
         let options = options.clone();
         let counter = Arc::clone(&counters[i]);
+        let token = cancel_token.child_token();
 
         join_set.spawn(async move {
-            download_chunk(&client, &url, &chunk, &temp_dir, &options, counter).await
+            download_chunk(&client, &url, &chunk, &temp_dir, &options, counter, token).await
         });
     }
 
