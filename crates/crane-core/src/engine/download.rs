@@ -9,12 +9,11 @@ use url::Url;
 
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
 
-#[allow(dead_code)] // Used in tests to size mock response bodies
-const CHUNK_SIZE: usize = 65_536; // 64KB
-const PROGRESS_INTERVAL_MS: u64 = 250;
-const RETRY_BACKOFF_MS: &[u64] = &[1000, 2000, 4000];
-const MAX_RETRIES: u32 = RETRY_BACKOFF_MS.len() as u32;
-const USER_AGENT: &str = "Crane/0.1.0";
+pub(crate) const CHUNK_SIZE: usize = 65_536; // 64KB
+pub(crate) const PROGRESS_INTERVAL_MS: u64 = 250;
+pub(crate) const RETRY_BACKOFF_MS: &[u64] = &[1000, 2000, 4000];
+pub(crate) const MAX_RETRIES: u32 = RETRY_BACKOFF_MS.len() as u32;
+pub(crate) const USER_AGENT: &str = "Crane/0.1.0";
 
 /// Build the temporary download path by appending `.cranedownload`.
 fn temp_path(save_path: &Path) -> PathBuf {
