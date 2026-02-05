@@ -304,7 +304,7 @@ where
         });
     }
 
-    // Collect results
+    // Collect results — abort all on first permanent failure
     let mut first_error: Option<CraneError> = None;
 
     while let Some(result) = join_set.join_next().await {
@@ -313,11 +313,13 @@ where
             Ok(Err(e)) => {
                 if first_error.is_none() {
                     first_error = Some(e);
+                    join_set.abort_all(); // abort remaining tasks
                 }
             }
             Err(e) => {
                 if first_error.is_none() {
                     first_error = Some(CraneError::Config(format!("task join error: {e}")));
+                    join_set.abort_all();
                 }
             }
         }
@@ -845,6 +847,135 @@ mod tests {
 
         let result = download(
             &format!("{}/headers.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    // ── Test 11: Fallback with explicit one connection ──
+
+    #[tokio::test]
+    async fn test_fallback_with_explicit_one_connection() {
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..524_288u32).map(|i| (i % 256) as u8).collect(); // 512KB
+
+        // HEAD advertises Accept-Ranges (resumable), but connections=1 should
+        // force single-connection path.
+        mount_head_with_ranges(&server, "/one_conn.bin", body.len() as u64).await;
+
+        // Mount a plain GET responder (single-connection path does not send Range header)
+        Mock::given(method("GET"))
+            .and(path("/one_conn.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.clone())
+                    .insert_header("Content-Length", body.len().to_string().as_str()),
+            )
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("one_conn.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(1),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/one_conn.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    // ── Test 12: Temp dir cleaned on failure ──
+
+    #[tokio::test]
+    async fn test_temp_dir_cleaned_on_failure() {
+        let server = MockServer::start().await;
+        let size: u64 = 1_048_576;
+
+        mount_head_with_ranges(&server, "/fail_clean.bin", size).await;
+
+        // GET always returns 500
+        Mock::given(method("GET"))
+            .and(path("/fail_clean.bin"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("fail_clean.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/fail_clean.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await;
+
+        assert!(result.is_err(), "download should fail when all connections return 500");
+
+        let temp_dir = temp_dir_path(&save);
+        assert!(
+            !temp_dir.exists(),
+            "temp dir {:?} should not exist after failed download",
+            temp_dir
+        );
+        assert!(!save.exists(), "final file should not exist after failure");
+    }
+
+    // ── Test 13: Chunk retry success ──
+
+    #[tokio::test]
+    async fn test_chunk_retry_success() {
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..524_288u32).map(|i| (i % 251) as u8).collect(); // 512KB
+
+        mount_head_with_ranges(&server, "/retry_ok.bin", body.len() as u64).await;
+
+        // First request to any chunk returns 500 (up_to_n_times(1)),
+        // then the RangeResponder takes over for subsequent attempts.
+        Mock::given(method("GET"))
+            .and(path("/retry_ok.bin"))
+            .respond_with(ResponseTemplate::new(500))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        // Mount the successful range responder with lower priority (registered after the 500)
+        mount_get_range(&server, "/retry_ok.bin", &body).await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("retry_ok.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(2),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/retry_ok.bin", server.uri()),
             &save,
             &opts,
             noop_progress,
