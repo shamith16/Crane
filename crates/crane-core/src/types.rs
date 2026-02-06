@@ -56,7 +56,7 @@ impl DownloadStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> Result<Self, CraneError> {
+    pub fn from_db_str(s: &str) -> Result<Self, CraneError> {
         match s {
             "pending" => Ok(Self::Pending),
             "analyzing" => Ok(Self::Analyzing),
@@ -83,7 +83,7 @@ impl FileCategory {
         }
     }
 
-    pub fn from_str(s: &str) -> Result<Self, CraneError> {
+    pub fn from_db_str(s: &str) -> Result<Self, CraneError> {
         match s {
             "documents" => Ok(Self::Documents),
             "video" => Ok(Self::Video),
@@ -107,7 +107,7 @@ impl ConnectionStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> Result<Self, CraneError> {
+    pub fn from_db_str(s: &str) -> Result<Self, CraneError> {
         match s {
             "pending" => Ok(Self::Pending),
             "active" => Ok(Self::Active),

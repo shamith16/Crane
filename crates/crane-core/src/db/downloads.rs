@@ -25,11 +25,11 @@ fn row_to_download(row: &rusqlite::Row) -> Result<Download, CraneError> {
         downloaded_size: row
             .get::<_, i64>(5)
             .map_err(|e| CraneError::Database(e.to_string()))? as u64,
-        status: DownloadStatus::from_str(&status_str)?,
+        status: DownloadStatus::from_db_str(&status_str)?,
         error_message: row.get(7).map_err(|e| CraneError::Database(e.to_string()))?,
         error_code: row.get(8).map_err(|e| CraneError::Database(e.to_string()))?,
         mime_type: row.get(9).map_err(|e| CraneError::Database(e.to_string()))?,
-        category: FileCategory::from_str(&category_str)?,
+        category: FileCategory::from_db_str(&category_str)?,
         resumable: resumable_int != 0,
         connections: row
             .get::<_, i64>(12)
