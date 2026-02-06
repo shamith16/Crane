@@ -43,6 +43,81 @@ pub enum ConnectionStatus {
     Failed,
 }
 
+impl DownloadStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Analyzing => "analyzing",
+            Self::Downloading => "downloading",
+            Self::Paused => "paused",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Queued => "queued",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Result<Self, CraneError> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "analyzing" => Ok(Self::Analyzing),
+            "downloading" => Ok(Self::Downloading),
+            "paused" => Ok(Self::Paused),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "queued" => Ok(Self::Queued),
+            _ => Err(CraneError::Database(format!("Unknown download status: {s}"))),
+        }
+    }
+}
+
+impl FileCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Documents => "documents",
+            Self::Video => "video",
+            Self::Audio => "audio",
+            Self::Images => "images",
+            Self::Archives => "archives",
+            Self::Software => "software",
+            Self::Other => "other",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Result<Self, CraneError> {
+        match s {
+            "documents" => Ok(Self::Documents),
+            "video" => Ok(Self::Video),
+            "audio" => Ok(Self::Audio),
+            "images" => Ok(Self::Images),
+            "archives" => Ok(Self::Archives),
+            "software" => Ok(Self::Software),
+            "other" => Ok(Self::Other),
+            _ => Err(CraneError::Database(format!("Unknown file category: {s}"))),
+        }
+    }
+}
+
+impl ConnectionStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Active => "active",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Result<Self, CraneError> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "active" => Ok(Self::Active),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            _ => Err(CraneError::Database(format!("Unknown connection status: {s}"))),
+        }
+    }
+}
+
 /// Result of a HEAD request before downloading
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UrlAnalysis {
@@ -73,11 +148,14 @@ pub struct Download {
     pub speed: f64,
     pub source_domain: Option<String>,
     pub referrer: Option<String>,
+    pub cookies: Option<String>,
+    pub user_agent: Option<String>,
     pub queue_position: Option<u32>,
     pub retry_count: u32,
     pub created_at: String,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +238,9 @@ pub enum CraneError {
 
     #[error("Unsupported URL scheme: {0}")]
     UnsupportedScheme(String),
+
+    #[error("Database error: {0}")]
+    Database(String),
 }
 
 impl From<CraneError> for String {
