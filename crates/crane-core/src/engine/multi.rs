@@ -32,6 +32,8 @@ struct DownloadController {
     cancel_token: tokio::sync::Mutex<CancellationToken>,
     paused: AtomicBool,
     cancelled: AtomicBool,
+    finished: AtomicBool,
+    error_message: std::sync::Mutex<Option<String>>,
     on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync>,
     is_multi: AtomicBool,
 }
@@ -130,6 +132,66 @@ impl DownloadHandle {
         self.inner.paused.load(Ordering::SeqCst)
     }
 
+    /// Returns true if the download task has completed (success or failure).
+    pub fn is_finished(&self) -> bool {
+        self.inner.finished.load(Ordering::SeqCst)
+    }
+
+    /// Returns the error message if the download failed.
+    pub fn error(&self) -> Option<String> {
+        self.inner.error_message.lock().unwrap().clone()
+    }
+
+    /// Build a progress snapshot by reading the atomic counters.
+    pub fn progress(&self, download_id: &str) -> DownloadProgress {
+        let mut total_downloaded: u64 = 0;
+        let connections: Vec<ConnectionProgress> = if self.inner.chunks.is_empty() {
+            // Single-connection mode
+            let downloaded = self
+                .inner
+                .counters
+                .first()
+                .map(|c| c.load(Ordering::Relaxed))
+                .unwrap_or(0);
+            total_downloaded = downloaded;
+            vec![ConnectionProgress {
+                connection_num: 0,
+                downloaded,
+                range_start: 0,
+                range_end: self.inner.total_size.saturating_sub(1),
+            }]
+        } else {
+            self.inner
+                .chunks
+                .iter()
+                .zip(self.inner.counters.iter())
+                .map(|(chunk, counter)| {
+                    let downloaded = counter.load(Ordering::Relaxed);
+                    total_downloaded += downloaded;
+                    ConnectionProgress {
+                        connection_num: chunk.connection_num,
+                        downloaded,
+                        range_start: chunk.range_start,
+                        range_end: chunk.range_end,
+                    }
+                })
+                .collect()
+        };
+
+        DownloadProgress {
+            download_id: download_id.to_string(),
+            downloaded_size: total_downloaded,
+            total_size: if self.inner.total_size > 0 {
+                Some(self.inner.total_size)
+            } else {
+                None
+            },
+            speed: 0.0,
+            eta_seconds: None,
+            connections,
+        }
+    }
+
     /// Consume the handle and wait for the download to complete.
     pub async fn wait(self) -> Result<DownloadResult, CraneError> {
         let mut guard = self.join_handle.lock().await;
@@ -195,6 +257,8 @@ where
         cancel_token: tokio::sync::Mutex::new(cancel_token),
         paused: AtomicBool::new(false),
         cancelled: AtomicBool::new(false),
+        finished: AtomicBool::new(false),
+        error_message: std::sync::Mutex::new(None),
         on_progress: Arc::new(on_progress),
         is_multi: AtomicBool::new(multi_eligible),
     });
@@ -396,6 +460,8 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
     // If any task failed, clean up and return error
     if let Some(err) = first_error {
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+        *ctrl.error_message.lock().unwrap() = Some(err.to_string());
+        ctrl.finished.store(true, Ordering::SeqCst);
         return Err(err);
     }
 
@@ -463,6 +529,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
             .collect(),
     });
 
+    ctrl.finished.store(true, Ordering::SeqCst);
     Ok(DownloadResult {
         downloaded_bytes: merged_bytes,
         elapsed_ms: elapsed.as_millis() as u64,
@@ -618,6 +685,14 @@ async fn run_single_download(ctrl: &DownloadController) -> Result<DownloadResult
             elapsed_ms: 0,
             final_path: ctrl.save_path.clone(),
         });
+    }
+
+    match &result {
+        Ok(_) => ctrl.finished.store(true, Ordering::SeqCst),
+        Err(e) => {
+            *ctrl.error_message.lock().unwrap() = Some(e.to_string());
+            ctrl.finished.store(true, Ordering::SeqCst);
+        }
     }
 
     result

@@ -11,12 +11,8 @@ use crate::types::{CraneError, Download, DownloadOptions, DownloadProgress, Down
 
 /// Manages download concurrency: starts downloads immediately when under the
 /// limit, queues them otherwise, and auto-promotes queued downloads when slots
-/// open up (pause/cancel).
-///
-/// TODO(step6): Add on_download_finished lifecycle hook. Currently, downloads
-/// that complete naturally (not via pause/cancel) leave stale entries in the
-/// active map and never free their concurrency slot. This will be resolved
-/// when the Tauri shell integrates completion callbacks.
+/// open up. Call `check_completed()` periodically to detect finished downloads
+/// and free their concurrency slots.
 pub struct QueueManager {
     db: Arc<Database>,
     active: tokio::sync::Mutex<HashMap<String, DownloadHandle>>,
@@ -182,6 +178,44 @@ impl QueueManager {
     /// List all downloads from the database.
     pub fn list_downloads(&self) -> Result<Vec<Download>, CraneError> {
         self.db.list_downloads()
+    }
+
+    /// Get progress for an active download by reading its handle's atomic counters.
+    pub async fn get_progress(&self, id: &str) -> Option<DownloadProgress> {
+        let active = self.active.lock().await;
+        active.get(id).map(|handle| handle.progress(id))
+    }
+
+    /// Scan active downloads, detect finished ones, update DB status, and free slots.
+    pub async fn check_completed(&self) -> Result<Vec<String>, CraneError> {
+        let mut active = self.active.lock().await;
+        let finished_ids: Vec<String> = active
+            .iter()
+            .filter(|(_, handle)| handle.is_finished())
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for id in &finished_ids {
+            if let Some(handle) = active.remove(id) {
+                if let Some(err_msg) = handle.error() {
+                    self.db.update_download_status(
+                        id,
+                        DownloadStatus::Failed,
+                        Some(&err_msg),
+                        None,
+                    )?;
+                } else {
+                    self.db
+                        .update_download_status(id, DownloadStatus::Completed, None, None)?;
+                }
+            }
+        }
+
+        if !finished_ids.is_empty() {
+            self.try_start_next(&mut active).await?;
+        }
+
+        Ok(finished_ids)
     }
 
     /// If there is capacity, start the next queued download.
@@ -518,5 +552,95 @@ mod tests {
         assert_eq!(dl1.status, DownloadStatus::Queued);
         assert!(dl1.queue_position.is_some());
         assert_eq!(qm.active_count().await, 1);
+    }
+
+    // ── Test 7: check_completed detects finished downloads ──
+
+    #[tokio::test]
+    async fn test_check_completed_detects_finished() {
+        let server = setup_server().await;
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let url = format!("{}/file.bin", server.uri());
+        let id = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // Wait for the small download (1024 bytes) to finish
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let completed = qm.check_completed().await.unwrap();
+        assert!(completed.contains(&id), "should detect completed download");
+        assert_eq!(qm.active_count().await, 0);
+        assert_eq!(
+            db.get_download(&id).unwrap().status,
+            DownloadStatus::Completed
+        );
+    }
+
+    // ── Test 8: get_progress returns data for active download ──
+
+    #[tokio::test]
+    async fn test_get_progress_returns_data() {
+        // Use a slow-responding mock to keep the download active
+        let server = MockServer::start().await;
+        Mock::given(method("HEAD"))
+            .and(path("/slow.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-length", "1024")
+                    .insert_header("content-type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/slow.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(vec![0xCC; 1024])
+                    .insert_header("content-length", "1024")
+                    .insert_header("content-type", "application/octet-stream")
+                    .set_delay(std::time::Duration::from_secs(5)),
+            )
+            .mount(&server)
+            .await;
+
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let url = format!("{}/slow.bin", server.uri());
+        let id = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        let progress = qm.get_progress(&id).await;
+        assert!(
+            progress.is_some(),
+            "should have progress for active download"
+        );
+        let p = progress.unwrap();
+        assert_eq!(p.download_id, id);
+    }
+
+    // ── Test 9: get_progress returns None for unknown id ──
+
+    #[tokio::test]
+    async fn test_get_progress_returns_none_for_unknown() {
+        let db = make_db();
+        let qm = QueueManager::new(db, 3);
+        assert!(qm.get_progress("nonexistent").await.is_none());
     }
 }
