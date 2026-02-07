@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>Crane</h1>
+    <div id="status">
+      <span id="status-dot"></span>
+      <span id="status-text">Checking...</span>
+    </div>
+  </header>
+
+  <section class="setting">
+    <label for="toggle-enabled">Intercept downloads</label>
+    <label class="toggle">
+      <input type="checkbox" id="toggle-enabled">
+      <span class="slider"></span>
+    </label>
+  </section>
+
+  <section class="setting capture-mode">
+    <label class="radio-label">
+      <input type="radio" name="captureMode" value="all" id="mode-all">
+      All downloads
+    </label>
+    <label class="radio-label">
+      <input type="radio" name="captureMode" value="context-menu" id="mode-context">
+      Context menu only
+    </label>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>
