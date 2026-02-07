@@ -1,4 +1,5 @@
 pub mod config;
+pub mod hash;
 pub mod db;
 pub mod engine;
 pub mod events;
