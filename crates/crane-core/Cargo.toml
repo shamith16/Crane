@@ -17,6 +17,8 @@ tracing = "0.1"
 urlencoding = "2"
 futures-util = "0.3"
 tokio-util = "0.7"
+toml = "0.8"
+dirs = "6"
 
 [dev-dependencies]
 wiremock = "0.6"
