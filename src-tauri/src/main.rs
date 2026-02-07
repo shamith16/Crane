@@ -2,6 +2,7 @@
 
 mod commands;
 mod state;
+mod tray;
 
 use std::sync::Arc;
 
@@ -46,6 +47,9 @@ fn main() {
                 queue,
                 default_save_dir: save_dir,
             });
+
+            // Setup system tray
+            tray::setup_tray(app)?;
 
             Ok(())
         })
