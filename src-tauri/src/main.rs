@@ -36,7 +36,7 @@ fn main() {
             // Spawn completion + pending monitor
             let monitor_queue = queue.clone();
             let monitor_save_dir = save_dir.clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
                 loop {
                     interval.tick().await;

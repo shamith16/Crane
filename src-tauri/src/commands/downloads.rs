@@ -61,7 +61,7 @@ pub async fn subscribe_progress(
     let queue = state.queue.clone();
     let id = download_id.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
         loop {
             interval.tick().await;
