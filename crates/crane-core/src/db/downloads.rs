@@ -165,8 +165,8 @@ impl Database {
     /// List all downloads ordered by created_at descending.
     pub fn list_downloads(&self) -> Result<Vec<Download>, CraneError> {
         let sql = format!("{SELECT_ALL_COLUMNS} ORDER BY created_at DESC");
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(&sql)
             .map_err(|e| CraneError::Database(e.to_string()))?;
 
@@ -197,8 +197,8 @@ impl Database {
         let sql = format!(
             "{SELECT_ALL_COLUMNS} WHERE status = ?1 ORDER BY queue_position ASC, created_at ASC"
         );
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(&sql)
             .map_err(|e| CraneError::Database(e.to_string()))?;
 
@@ -335,8 +335,8 @@ impl Database {
         let sql = format!(
             "{SELECT_ALL_COLUMNS} WHERE status = 'queued' ORDER BY queue_position ASC LIMIT 1"
         );
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(&sql)
             .map_err(|e| CraneError::Database(e.to_string()))?;
 

@@ -43,8 +43,8 @@ impl Database {
 
     /// Get site settings for a domain, or None if not configured.
     pub fn get_site_settings(&self, domain: &str) -> Result<Option<SiteSettings>, CraneError> {
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(
                 "SELECT domain, connections, save_folder, category, user_agent, created_at
                  FROM site_settings

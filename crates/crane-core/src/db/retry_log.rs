@@ -34,8 +34,8 @@ impl Database {
 
     /// Get all retry entries for a download, ordered by attempt ascending.
     pub fn get_retries(&self, download_id: &str) -> Result<Vec<RetryEntry>, CraneError> {
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(
                 "SELECT attempt, error_message, error_code, timestamp
                  FROM retry_log

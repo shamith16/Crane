@@ -7,10 +7,14 @@ pub mod speed_history;
 use crate::types::CraneError;
 use rusqlite::Connection;
 use std::path::Path;
+use std::sync::{Mutex, MutexGuard};
 
 /// Wrapper around a SQLite connection for Crane's persistence layer.
+///
+/// The connection is wrapped in a `Mutex` so that `Database` is `Send + Sync`,
+/// which is required for use inside Tauri's managed state.
 pub struct Database {
-    conn: Connection,
+    conn: Mutex<Connection>,
 }
 
 impl Database {
@@ -25,7 +29,9 @@ impl Database {
 
         let conn = Connection::open(path).map_err(|e| CraneError::Database(e.to_string()))?;
 
-        let db = Self { conn };
+        let db = Self {
+            conn: Mutex::new(conn),
+        };
         db.setup()?;
         Ok(db)
     }
@@ -34,31 +40,35 @@ impl Database {
     pub fn open_in_memory() -> Result<Self, CraneError> {
         let conn = Connection::open_in_memory().map_err(|e| CraneError::Database(e.to_string()))?;
 
-        let db = Self { conn };
+        let db = Self {
+            conn: Mutex::new(conn),
+        };
         db.setup()?;
         Ok(db)
     }
 
     /// Accessor for the underlying connection.
-    pub(crate) fn conn(&self) -> &Connection {
-        &self.conn
+    ///
+    /// Locks the mutex and returns a guard. Panics if the mutex is poisoned.
+    pub(crate) fn conn(&self) -> MutexGuard<'_, Connection> {
+        self.conn.lock().expect("Database mutex poisoned")
     }
 
     /// Set pragmas and create all tables + indexes.
     fn setup(&self) -> Result<(), CraneError> {
-        self.conn
-            .execute_batch("PRAGMA journal_mode=WAL;")
+        let conn = self.conn();
+        conn.execute_batch("PRAGMA journal_mode=WAL;")
             .map_err(|e| CraneError::Database(e.to_string()))?;
-        self.conn
-            .execute_batch("PRAGMA foreign_keys=ON;")
+        conn.execute_batch("PRAGMA foreign_keys=ON;")
             .map_err(|e| CraneError::Database(e.to_string()))?;
+        drop(conn);
 
         self.create_tables()?;
         Ok(())
     }
 
     fn create_tables(&self) -> Result<(), CraneError> {
-        self.conn
+        self.conn()
             .execute_batch(
                 "
             CREATE TABLE IF NOT EXISTS downloads (
@@ -155,8 +165,8 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
 
         // Verify all 5 tables exist
-        let tables: Vec<String> = db
-            .conn()
+        let conn = db.conn();
+        let tables: Vec<String> = conn
             .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
             .unwrap()
             .query_map([], |row| row.get(0))

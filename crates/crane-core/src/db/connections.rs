@@ -12,8 +12,8 @@ impl Database {
         connections: &[ConnectionInfo],
         temp_dir: &str,
     ) -> Result<(), CraneError> {
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(
                 "INSERT INTO connections (download_id, connection_num, range_start, range_end, downloaded, status, temp_file)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -39,8 +39,8 @@ impl Database {
 
     /// Get all connections for a download, ordered by connection_num.
     pub fn get_connections(&self, download_id: &str) -> Result<Vec<ConnectionInfo>, CraneError> {
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(
                 "SELECT connection_num, range_start, range_end, downloaded, status
                  FROM connections

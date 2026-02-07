@@ -31,8 +31,8 @@ impl Database {
     ) -> Result<Vec<SpeedSample>, CraneError> {
         let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(seconds as i64)).to_rfc3339();
 
-        let mut stmt = self
-            .conn()
+        let conn = self.conn();
+        let mut stmt = conn
             .prepare(
                 "SELECT speed, timestamp FROM speed_history
                  WHERE download_id = ?1 AND timestamp >= ?2
