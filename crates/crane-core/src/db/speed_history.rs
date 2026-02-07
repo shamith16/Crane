@@ -11,11 +11,7 @@ pub struct SpeedSample {
 
 impl Database {
     /// Record a speed sample for a download (timestamp = now).
-    pub fn insert_speed_sample(
-        &self,
-        download_id: &str,
-        speed: f64,
-    ) -> Result<(), CraneError> {
+    pub fn insert_speed_sample(&self, download_id: &str, speed: f64) -> Result<(), CraneError> {
         let now = chrono::Utc::now().to_rfc3339();
         self.conn()
             .execute(

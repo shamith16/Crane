@@ -7,13 +7,16 @@ use std::sync::Arc;
 use crate::db::Database;
 use crate::engine::multi::{start_download, DownloadHandle};
 use crate::metadata::analyzer::analyze_url;
-use crate::types::{
-    CraneError, Download, DownloadOptions, DownloadProgress, DownloadStatus,
-};
+use crate::types::{CraneError, Download, DownloadOptions, DownloadProgress, DownloadStatus};
 
 /// Manages download concurrency: starts downloads immediately when under the
 /// limit, queues them otherwise, and auto-promotes queued downloads when slots
 /// open up (pause/cancel).
+///
+/// TODO(step6): Add on_download_finished lifecycle hook. Currently, downloads
+/// that complete naturally (not via pause/cancel) leave stale entries in the
+/// active map and never free their concurrency slot. This will be resolved
+/// when the Tauri shell integrates completion callbacks.
 pub struct QueueManager {
     db: Arc<Database>,
     active: tokio::sync::Mutex<HashMap<String, DownloadHandle>>,
@@ -95,12 +98,8 @@ impl QueueManager {
         } else {
             let max_pos = self.db.get_max_queue_position()?.unwrap_or(0);
             self.db.update_queue_position(&id, Some(max_pos + 1))?;
-            self.db.update_download_status(
-                &id,
-                DownloadStatus::Queued,
-                None,
-                None,
-            )?;
+            self.db
+                .update_download_status(&id, DownloadStatus::Queued, None, None)?;
         }
 
         Ok(id)
@@ -110,21 +109,15 @@ impl QueueManager {
     /// the next queued download if one exists.
     pub async fn pause(&self, id: &str) -> Result<(), CraneError> {
         let mut active = self.active.lock().await;
-        let handle = active
-            .remove(id)
-            .ok_or_else(|| CraneError::InvalidState {
-                from: "unknown".to_string(),
-                to: "paused".to_string(),
-            })?;
+        let handle = active.remove(id).ok_or_else(|| CraneError::InvalidState {
+            from: "unknown".to_string(),
+            to: "paused".to_string(),
+        })?;
 
         handle.pause().await;
 
-        self.db.update_download_status(
-            id,
-            DownloadStatus::Paused,
-            None,
-            None,
-        )?;
+        self.db
+            .update_download_status(id, DownloadStatus::Paused, None, None)?;
 
         self.try_start_next(&mut active).await?;
 
@@ -158,12 +151,8 @@ impl QueueManager {
         } else {
             let max_pos = self.db.get_max_queue_position()?.unwrap_or(0);
             self.db.update_queue_position(id, Some(max_pos + 1))?;
-            self.db.update_download_status(
-                id,
-                DownloadStatus::Queued,
-                None,
-                None,
-            )?;
+            self.db
+                .update_download_status(id, DownloadStatus::Queued, None, None)?;
         }
 
         Ok(())
@@ -177,12 +166,8 @@ impl QueueManager {
             handle.cancel().await;
         }
 
-        self.db.update_download_status(
-            id,
-            DownloadStatus::Failed,
-            Some("cancelled"),
-            None,
-        )?;
+        self.db
+            .update_download_status(id, DownloadStatus::Failed, Some("cancelled"), None)?;
 
         self.try_start_next(&mut active).await?;
 
@@ -241,12 +226,8 @@ impl QueueManager {
 
         let handle = start_download(&url, save_path, options, on_progress).await?;
 
-        self.db.update_download_status(
-            id,
-            DownloadStatus::Downloading,
-            None,
-            None,
-        )?;
+        self.db
+            .update_download_status(id, DownloadStatus::Downloading, None, None)?;
 
         active.insert(id.to_string(), handle);
 
@@ -325,7 +306,11 @@ mod tests {
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
-            .add_download(&url, tmp.path().to_str().unwrap(), DownloadOptions::default())
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
             .await
             .unwrap();
 
@@ -346,7 +331,11 @@ mod tests {
 
         let url1 = format!("{}/file.bin", server.uri());
         let _id1 = qm
-            .add_download(&url1, tmp.path().to_str().unwrap(), DownloadOptions::default())
+            .add_download(
+                &url1,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
             .await
             .unwrap();
 
@@ -381,7 +370,11 @@ mod tests {
 
         let url1 = format!("{}/file.bin", server.uri());
         let id1 = qm
-            .add_download(&url1, tmp.path().to_str().unwrap(), DownloadOptions::default())
+            .add_download(
+                &url1,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
             .await
             .unwrap();
 
@@ -399,13 +392,22 @@ mod tests {
             .unwrap();
 
         // Second should be queued
-        assert_eq!(db.get_download(&id2).unwrap().status, DownloadStatus::Queued);
+        assert_eq!(
+            db.get_download(&id2).unwrap().status,
+            DownloadStatus::Queued
+        );
 
         // Pause first => slot opens => second should auto-start
         qm.pause(&id1).await.unwrap();
 
-        assert_eq!(db.get_download(&id1).unwrap().status, DownloadStatus::Paused);
-        assert_eq!(db.get_download(&id2).unwrap().status, DownloadStatus::Downloading);
+        assert_eq!(
+            db.get_download(&id1).unwrap().status,
+            DownloadStatus::Paused
+        );
+        assert_eq!(
+            db.get_download(&id2).unwrap().status,
+            DownloadStatus::Downloading
+        );
         assert_eq!(qm.active_count().await, 1);
     }
 
@@ -420,7 +422,11 @@ mod tests {
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
-            .add_download(&url, tmp.path().to_str().unwrap(), DownloadOptions::default())
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
             .await
             .unwrap();
 
@@ -445,7 +451,11 @@ mod tests {
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
-            .add_download(&url, tmp.path().to_str().unwrap(), DownloadOptions::default())
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
             .await
             .unwrap();
 
@@ -455,7 +465,10 @@ mod tests {
 
         qm.resume(&id).await.unwrap();
         assert_eq!(qm.active_count().await, 1);
-        assert_eq!(db.get_download(&id).unwrap().status, DownloadStatus::Downloading);
+        assert_eq!(
+            db.get_download(&id).unwrap().status,
+            DownloadStatus::Downloading
+        );
     }
 
     // ── Test 6: resume queues when at capacity ──
@@ -471,7 +484,11 @@ mod tests {
         // Add first download (takes the only slot)
         let url1 = format!("{}/file.bin", server.uri());
         let id1 = qm
-            .add_download(&url1, tmp.path().to_str().unwrap(), DownloadOptions::default())
+            .add_download(
+                &url1,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
             .await
             .unwrap();
 

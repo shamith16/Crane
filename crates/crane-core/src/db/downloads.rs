@@ -15,30 +15,55 @@ fn row_to_download(row: &rusqlite::Row) -> Result<Download, CraneError> {
         .map_err(|e| CraneError::Database(e.to_string()))?;
 
     Ok(Download {
-        id: row.get(0).map_err(|e| CraneError::Database(e.to_string()))?,
-        url: row.get(1).map_err(|e| CraneError::Database(e.to_string()))?,
-        filename: row.get(2).map_err(|e| CraneError::Database(e.to_string()))?,
-        save_path: row.get(3).map_err(|e| CraneError::Database(e.to_string()))?,
-        total_size: row.get::<_, Option<i64>>(4)
+        id: row
+            .get(0)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        url: row
+            .get(1)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        filename: row
+            .get(2)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        save_path: row
+            .get(3)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        total_size: row
+            .get::<_, Option<i64>>(4)
             .map_err(|e| CraneError::Database(e.to_string()))?
             .map(|v| v as u64),
         downloaded_size: row
             .get::<_, i64>(5)
             .map_err(|e| CraneError::Database(e.to_string()))? as u64,
         status: DownloadStatus::from_db_str(&status_str)?,
-        error_message: row.get(7).map_err(|e| CraneError::Database(e.to_string()))?,
-        error_code: row.get(8).map_err(|e| CraneError::Database(e.to_string()))?,
-        mime_type: row.get(9).map_err(|e| CraneError::Database(e.to_string()))?,
+        error_message: row
+            .get(7)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        error_code: row
+            .get(8)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        mime_type: row
+            .get(9)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
         category: FileCategory::from_db_str(&category_str)?,
         resumable: resumable_int != 0,
         connections: row
             .get::<_, i64>(12)
             .map_err(|e| CraneError::Database(e.to_string()))? as u32,
-        speed: row.get(13).map_err(|e| CraneError::Database(e.to_string()))?,
-        source_domain: row.get(14).map_err(|e| CraneError::Database(e.to_string()))?,
-        referrer: row.get(15).map_err(|e| CraneError::Database(e.to_string()))?,
-        cookies: row.get(16).map_err(|e| CraneError::Database(e.to_string()))?,
-        user_agent: row.get(17).map_err(|e| CraneError::Database(e.to_string()))?,
+        speed: row
+            .get(13)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        source_domain: row
+            .get(14)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        referrer: row
+            .get(15)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        cookies: row
+            .get(16)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        user_agent: row
+            .get(17)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
         queue_position: row
             .get::<_, Option<i64>>(18)
             .map_err(|e| CraneError::Database(e.to_string()))?
@@ -46,10 +71,18 @@ fn row_to_download(row: &rusqlite::Row) -> Result<Download, CraneError> {
         retry_count: row
             .get::<_, i64>(19)
             .map_err(|e| CraneError::Database(e.to_string()))? as u32,
-        created_at: row.get(20).map_err(|e| CraneError::Database(e.to_string()))?,
-        started_at: row.get(21).map_err(|e| CraneError::Database(e.to_string()))?,
-        completed_at: row.get(22).map_err(|e| CraneError::Database(e.to_string()))?,
-        updated_at: row.get(23).map_err(|e| CraneError::Database(e.to_string()))?,
+        created_at: row
+            .get(20)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        started_at: row
+            .get(21)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        completed_at: row
+            .get(22)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
+        updated_at: row
+            .get(23)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
     })
 }
 
@@ -116,13 +149,15 @@ impl Database {
         self.conn()
             .query_row(&sql, params![id], |row| {
                 row_to_download(row).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
                 })
             })
             .map_err(|e| match e {
-                rusqlite::Error::QueryReturnedNoRows => {
-                    CraneError::NotFound(id.to_string())
-                }
+                rusqlite::Error::QueryReturnedNoRows => CraneError::NotFound(id.to_string()),
                 _ => CraneError::Database(e.to_string()),
             })
     }
@@ -138,7 +173,11 @@ impl Database {
         let rows = stmt
             .query_map([], |row| {
                 row_to_download(row).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
                 })
             })
             .map_err(|e| CraneError::Database(e.to_string()))?;
@@ -166,7 +205,11 @@ impl Database {
         let rows = stmt
             .query_map(params![status.as_str()], |row| {
                 row_to_download(row).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
                 })
             })
             .map_err(|e| CraneError::Database(e.to_string()))?;
@@ -268,16 +311,16 @@ impl Database {
     }
 
     /// Update the queue position of a download.
-    pub fn update_queue_position(
-        &self,
-        id: &str,
-        position: Option<u32>,
-    ) -> Result<(), CraneError> {
+    pub fn update_queue_position(&self, id: &str, position: Option<u32>) -> Result<(), CraneError> {
         let rows = self
             .conn()
             .execute(
                 "UPDATE downloads SET queue_position = ?1, updated_at = ?2 WHERE id = ?3",
-                params![position.map(|v| v as i64), chrono::Utc::now().to_rfc3339(), id],
+                params![
+                    position.map(|v| v as i64),
+                    chrono::Utc::now().to_rfc3339(),
+                    id
+                ],
             )
             .map_err(|e| CraneError::Database(e.to_string()))?;
 
@@ -300,13 +343,19 @@ impl Database {
         let mut rows = stmt
             .query_map([], |row| {
                 row_to_download(row).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
                 })
             })
             .map_err(|e| CraneError::Database(e.to_string()))?;
 
         match rows.next() {
-            Some(result) => Ok(Some(result.map_err(|e| CraneError::Database(e.to_string()))?)),
+            Some(result) => Ok(Some(
+                result.map_err(|e| CraneError::Database(e.to_string()))?,
+            )),
             None => Ok(None),
         }
     }
@@ -435,8 +484,13 @@ mod tests {
         let dl = make_test_download("dl-1", DownloadStatus::Pending);
         db.insert_download(&dl).unwrap();
 
-        db.update_download_status("dl-1", DownloadStatus::Failed, Some("timeout"), Some("E001"))
-            .unwrap();
+        db.update_download_status(
+            "dl-1",
+            DownloadStatus::Failed,
+            Some("timeout"),
+            Some("E001"),
+        )
+        .unwrap();
 
         let fetched = db.get_download("dl-1").unwrap();
         assert_eq!(fetched.status, DownloadStatus::Failed);

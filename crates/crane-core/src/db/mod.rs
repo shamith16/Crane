@@ -23,8 +23,7 @@ impl Database {
             std::fs::create_dir_all(parent)?;
         }
 
-        let conn = Connection::open(path)
-            .map_err(|e| CraneError::Database(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| CraneError::Database(e.to_string()))?;
 
         let db = Self { conn };
         db.setup()?;
@@ -33,8 +32,7 @@ impl Database {
 
     /// Open an in-memory database — useful for tests.
     pub fn open_in_memory() -> Result<Self, CraneError> {
-        let conn = Connection::open_in_memory()
-            .map_err(|e| CraneError::Database(e.to_string()))?;
+        let conn = Connection::open_in_memory().map_err(|e| CraneError::Database(e.to_string()))?;
 
         let db = Self { conn };
         db.setup()?;

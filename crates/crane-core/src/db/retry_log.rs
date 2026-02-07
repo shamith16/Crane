@@ -92,7 +92,10 @@ mod tests {
         assert_eq!(retries.len(), 3);
 
         assert_eq!(retries[0].attempt, 1);
-        assert_eq!(retries[0].error_message.as_deref(), Some("connection reset"));
+        assert_eq!(
+            retries[0].error_message.as_deref(),
+            Some("connection reset")
+        );
         assert_eq!(retries[0].error_code.as_deref(), Some("E001"));
 
         assert_eq!(retries[1].attempt, 2);

@@ -65,7 +65,9 @@ impl DownloadStatus {
             "completed" => Ok(Self::Completed),
             "failed" => Ok(Self::Failed),
             "queued" => Ok(Self::Queued),
-            _ => Err(CraneError::Database(format!("Unknown download status: {s}"))),
+            _ => Err(CraneError::Database(format!(
+                "Unknown download status: {s}"
+            ))),
         }
     }
 }
@@ -113,7 +115,9 @@ impl ConnectionStatus {
             "active" => Ok(Self::Active),
             "completed" => Ok(Self::Completed),
             "failed" => Ok(Self::Failed),
-            _ => Err(CraneError::Database(format!("Unknown connection status: {s}"))),
+            _ => Err(CraneError::Database(format!(
+                "Unknown connection status: {s}"
+            ))),
         }
     }
 }
