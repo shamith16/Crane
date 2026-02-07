@@ -245,6 +245,45 @@ impl QueueManager {
         Ok(())
     }
 
+    /// Pick up externally-inserted pending downloads (e.g., from the native messaging sidecar).
+    /// For each pending download not already in the active map, starts it if there's capacity
+    /// or queues it otherwise. Returns the IDs of downloads that were started.
+    pub async fn check_pending(&self, _default_save_dir: &str) -> Result<Vec<String>, CraneError> {
+        let pending = self.db.get_downloads_by_status(DownloadStatus::Pending)?;
+        let mut started = Vec::new();
+
+        for dl in pending {
+            let mut active = self.active.lock().await;
+
+            // Skip if already being handled
+            if active.contains_key(&dl.id) {
+                continue;
+            }
+
+            if (active.len() as u32) < self.max_concurrent {
+                let save_path = PathBuf::from(&dl.save_path);
+                let options = DownloadOptions {
+                    filename: Some(dl.filename.clone()),
+                    connections: Some(dl.connections),
+                    referrer: dl.referrer.clone(),
+                    cookies: dl.cookies.clone(),
+                    user_agent: dl.user_agent.clone(),
+                    ..Default::default()
+                };
+                self.start_download_internal(&dl.id, &save_path, &options, &mut active)
+                    .await?;
+                started.push(dl.id.clone());
+            } else {
+                let max_pos = self.db.get_max_queue_position()?.unwrap_or(0);
+                self.db.update_queue_position(&dl.id, Some(max_pos + 1))?;
+                self.db
+                    .update_download_status(&dl.id, DownloadStatus::Queued, None, None)?;
+            }
+        }
+
+        Ok(started)
+    }
+
     /// Start a download, update DB status, and insert the handle into the active map.
     async fn start_download_internal(
         &self,
@@ -272,6 +311,7 @@ impl QueueManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::FileCategory;
     use tempfile::TempDir;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -642,5 +682,129 @@ mod tests {
         let db = make_db();
         let qm = QueueManager::new(db, 3);
         assert!(qm.get_progress("nonexistent").await.is_none());
+    }
+
+    // ── Test 10: check_pending starts externally-inserted downloads ──
+
+    #[tokio::test]
+    async fn test_check_pending_starts_external_downloads() {
+        let server = setup_server().await;
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        // Insert a download row directly into DB with status=pending,
+        // simulating what the native messaging sidecar does.
+        let url = format!("{}/file.bin", server.uri());
+        let dl = Download {
+            id: "ext-1".to_string(),
+            url,
+            filename: "file.bin".to_string(),
+            save_path: tmp.path().join("file.bin").to_string_lossy().to_string(),
+            total_size: Some(1024),
+            downloaded_size: 0,
+            status: DownloadStatus::Pending,
+            error_message: None,
+            error_code: None,
+            mime_type: Some("application/octet-stream".to_string()),
+            category: FileCategory::Other,
+            resumable: true,
+            connections: 4,
+            speed: 0.0,
+            source_domain: Some("localhost".to_string()),
+            referrer: None,
+            cookies: None,
+            user_agent: None,
+            queue_position: None,
+            retry_count: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: None,
+            completed_at: None,
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_download(&dl).unwrap();
+
+        let started = qm
+            .check_pending(tmp.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0], "ext-1");
+        assert_eq!(qm.active_count().await, 1);
+        assert_eq!(
+            db.get_download("ext-1").unwrap().status,
+            DownloadStatus::Downloading
+        );
+    }
+
+    // ── Test 11: check_pending queues when at capacity ──
+
+    #[tokio::test]
+    async fn test_check_pending_queues_when_at_capacity() {
+        let server = setup_server().await;
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 1);
+
+        // Fill the only slot with a real download via add_download
+        let url1 = format!("{}/file.bin", server.uri());
+        let _id1 = qm
+            .add_download(
+                &url1,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(qm.active_count().await, 1);
+
+        // Insert an external pending download directly into DB
+        let url2 = format!("{}/file.bin", server.uri());
+        let dl = Download {
+            id: "ext-2".to_string(),
+            url: url2,
+            filename: "ext-file.bin".to_string(),
+            save_path: tmp
+                .path()
+                .join("ext-file.bin")
+                .to_string_lossy()
+                .to_string(),
+            total_size: Some(1024),
+            downloaded_size: 0,
+            status: DownloadStatus::Pending,
+            error_message: None,
+            error_code: None,
+            mime_type: Some("application/octet-stream".to_string()),
+            category: FileCategory::Other,
+            resumable: true,
+            connections: 4,
+            speed: 0.0,
+            source_domain: Some("localhost".to_string()),
+            referrer: None,
+            cookies: None,
+            user_agent: None,
+            queue_position: None,
+            retry_count: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: None,
+            completed_at: None,
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_download(&dl).unwrap();
+
+        let started = qm
+            .check_pending(tmp.path().to_str().unwrap())
+            .await
+            .unwrap();
+
+        // Should not have started (at capacity)
+        assert!(started.is_empty());
+        // Should be queued
+        let ext_dl = db.get_download("ext-2").unwrap();
+        assert_eq!(ext_dl.status, DownloadStatus::Queued);
+        assert!(ext_dl.queue_position.is_some());
+        // Still only 1 active
+        assert_eq!(qm.active_count().await, 1);
     }
 }

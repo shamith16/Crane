@@ -33,13 +33,15 @@ fn main() {
             // Create queue manager (max 3 concurrent downloads)
             let queue = Arc::new(QueueManager::new(db, 3));
 
-            // Spawn completion monitor
+            // Spawn completion + pending monitor
             let monitor_queue = queue.clone();
+            let monitor_save_dir = save_dir.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
                 loop {
                     interval.tick().await;
                     let _ = monitor_queue.check_completed().await;
+                    let _ = monitor_queue.check_pending(&monitor_save_dir).await;
                 }
             });
 
