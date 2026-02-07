@@ -35,12 +35,8 @@ fn read_message<R: Read>(reader: &mut R) -> io::Result<Option<serde_json::Value>
     let mut buf = vec![0u8; len as usize];
     reader.read_exact(&mut buf)?;
 
-    let value: serde_json::Value = serde_json::from_slice(&buf).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("invalid JSON: {e}"),
-        )
-    })?;
+    let value: serde_json::Value = serde_json::from_slice(&buf)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid JSON: {e}")))?;
 
     Ok(Some(value))
 }
@@ -50,7 +46,10 @@ fn read_message<R: Read>(reader: &mut R) -> io::Result<Option<serde_json::Value>
 /// Serializes JSON, writes 4-byte native-endian length prefix + JSON bytes, flushes.
 fn write_message<W: Write>(writer: &mut W, msg: &serde_json::Value) -> io::Result<()> {
     let payload = serde_json::to_vec(msg).map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("JSON serialize error: {e}"))
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("JSON serialize error: {e}"),
+        )
     })?;
     let len = payload.len() as u32;
     writer.write_all(&len.to_ne_bytes())?;
@@ -139,15 +138,13 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
         .unwrap_or_else(|| {
             parsed_url
                 .path_segments()
-                .and_then(|segs| segs.last())
+                .and_then(|mut segs| segs.next_back())
                 .filter(|s| !s.is_empty())
                 .unwrap_or("download")
                 .to_string()
         });
 
-    let file_size = msg
-        .get("fileSize")
-        .and_then(|v| v.as_u64());
+    let file_size = msg.get("fileSize").and_then(|v| v.as_u64());
 
     let mime_type = msg
         .get("mimeType")
@@ -370,8 +367,14 @@ mod tests {
         assert_eq!(categorize_mime(Some("video/mp4")), FileCategory::Video);
         assert_eq!(categorize_mime(Some("audio/mpeg")), FileCategory::Audio);
         assert_eq!(categorize_mime(Some("image/png")), FileCategory::Images);
-        assert_eq!(categorize_mime(Some("application/pdf")), FileCategory::Documents);
-        assert_eq!(categorize_mime(Some("application/zip")), FileCategory::Archives);
+        assert_eq!(
+            categorize_mime(Some("application/pdf")),
+            FileCategory::Documents
+        );
+        assert_eq!(
+            categorize_mime(Some("application/zip")),
+            FileCategory::Archives
+        );
         assert_eq!(categorize_mime(None), FileCategory::Other);
     }
 }
