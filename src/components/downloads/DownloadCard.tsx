@@ -1,5 +1,6 @@
 import { Show, createMemo } from "solid-js";
 import type { Download, DownloadProgress } from "../../lib/types";
+import { formatSize, formatSpeed, formatEta } from "../../lib/format";
 import {
   selectedIds,
   setSelectedIds,
@@ -14,38 +15,6 @@ import {
   openFile,
   openFolder,
 } from "../../lib/commands";
-
-// ─── Formatting helpers ─────────────────────────
-
-function formatSize(bytes: number | null): string {
-  if (bytes === null || bytes === 0) return "\u2014";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let size = bytes;
-  while (size >= 1024 && i < units.length - 1) {
-    size /= 1024;
-    i++;
-  }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec <= 0) return "\u2014";
-  return `${formatSize(bytesPerSec)}/s`;
-}
-
-function formatEta(seconds: number | null): string {
-  if (seconds === null || seconds <= 0) return "";
-  if (seconds < 60) return `${Math.ceil(seconds)}s`;
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.ceil(seconds % 60);
-    return `${m}m ${s}s`;
-  }
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 
 // ─── Status styling ─────────────────────────────
 
@@ -327,7 +296,7 @@ export default function DownloadCard(props: Props) {
       </Show>
 
       {/* Error message for failed */}
-      <Show when={dl().error_message}>
+      <Show when={dl().status === "failed" && dl().error_message}>
         <p class="mt-1 text-xs text-error truncate">{dl().error_message}</p>
       </Show>
     </div>

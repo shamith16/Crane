@@ -18,33 +18,33 @@ export default function FloatingActionBar(props: Props) {
 
   async function handlePauseSelected() {
     const ids = Array.from(selectedIds());
-    try {
-      await Promise.allSettled(ids.map((id) => pauseDownload(id)));
-      props.onRefresh();
-    } catch (err) {
-      console.error("Pause selected failed:", err);
+    const results = await Promise.allSettled(ids.map((id) => pauseDownload(id)));
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.error(`${failures.length} pause(s) failed:`, failures);
     }
+    props.onRefresh();
   }
 
   async function handleResumeSelected() {
     const ids = Array.from(selectedIds());
-    try {
-      await Promise.allSettled(ids.map((id) => resumeDownload(id)));
-      props.onRefresh();
-    } catch (err) {
-      console.error("Resume selected failed:", err);
+    const results = await Promise.allSettled(ids.map((id) => resumeDownload(id)));
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.error(`${failures.length} resume(s) failed:`, failures);
     }
+    props.onRefresh();
   }
 
   async function handleDeleteSelected() {
     const ids = Array.from(selectedIds());
-    try {
-      await Promise.allSettled(ids.map((id) => deleteDownload(id, false)));
-      clearSelection();
-      props.onRefresh();
-    } catch (err) {
-      console.error("Delete selected failed:", err);
+    const results = await Promise.allSettled(ids.map((id) => deleteDownload(id, false)));
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.error(`${failures.length} delete(s) failed:`, failures);
     }
+    clearSelection();
+    props.onRefresh();
   }
 
   return (

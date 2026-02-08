@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createMemo, onMount, onCleanup } from "solid-js";
+import { For, Show, createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
 import { getDownloads, subscribeProgress } from "../lib/commands";
 import type { Download, DownloadProgress } from "../lib/types";
 import { statusFilter, categoryFilter } from "../stores/ui";
@@ -119,9 +119,8 @@ export default function DownloadList(props: Props) {
   });
 
   // Re-fetch when refreshTrigger changes
-  createMemo(() => {
-    // Access the prop to track it
-    const _ = props.refreshTrigger;
+  createEffect(() => {
+    props.refreshTrigger; // reactive dependency
     refresh();
   });
 
@@ -195,11 +194,19 @@ export default function DownloadList(props: Props) {
               return (
                 <div>
                   {/* Group header */}
-                  <button
-                    class="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors select-none"
-                    onClick={() => group.collapsible && toggleGroupCollapse(group.key)}
+                  <Show
+                    when={group.collapsible}
+                    fallback={
+                      <div class="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-muted select-none">
+                        <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
+                      </div>
+                    }
                   >
-                    <Show when={group.collapsible}>
+                    <button
+                      class="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors select-none"
+                      onClick={() => toggleGroupCollapse(group.key)}
+                      aria-expanded={!isCollapsed()}
+                    >
                       <span
                         class="transition-transform duration-150"
                         style={{
@@ -209,9 +216,9 @@ export default function DownloadList(props: Props) {
                       >
                         &#9662;
                       </span>
-                    </Show>
-                    <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
-                  </button>
+                      <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
+                    </button>
+                  </Show>
 
                   {/* Group items */}
                   <Show when={!isCollapsed()}>
