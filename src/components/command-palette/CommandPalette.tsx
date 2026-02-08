@@ -1,6 +1,6 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { commandPaletteOpen, setCommandPaletteOpen, setSettingsOpen, toggleSidebar, setSelectedDownloadId } from "../../stores/ui";
-import { pauseAll, resumeAll, deleteCompleted } from "../../lib/commands";
+import { pauseAll, resumeAll, deleteCompleted, getSettings } from "../../lib/commands";
 import CommandItem from "./CommandItem";
 import type { Command } from "./CommandItem";
 import type { Download } from "../../lib/types";
@@ -51,6 +51,14 @@ function SidebarIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
       <path fill-rule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75Zm0 10.5a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1-.75-.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Z" clip-rule="evenodd" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+      <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
     </svg>
   );
 }
@@ -130,6 +138,23 @@ export default function CommandPalette(props: Props) {
         action: () => {
           close();
           deleteCompleted();
+        },
+      },
+      {
+        id: "open-downloads-folder",
+        label: "Open Downloads Folder",
+        group: "actions",
+        icon: <FolderIcon />,
+        action: () => {
+          close();
+          getSettings().then((config) => {
+            const loc = config.general.download_location;
+            if (loc) {
+              // Use openFolder with a completed download or fall back to settings
+              // TODO: Add a dedicated open_path Tauri command
+              setSettingsOpen(true);
+            }
+          }).catch(() => {});
         },
       },
       {
