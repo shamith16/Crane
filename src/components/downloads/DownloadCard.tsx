@@ -10,6 +10,7 @@ import {
   pauseDownload,
   resumeDownload,
   retryDownload,
+  addDownload,
   openFile,
   openFolder,
 } from "../../lib/commands";
@@ -212,6 +213,16 @@ export default function DownloadCard(props: Props) {
     }
   }
 
+  async function handleRedownload(e: MouseEvent) {
+    e.stopPropagation();
+    try {
+      await addDownload(dl().url);
+      props.onRefresh();
+    } catch (err) {
+      console.error("Redownload failed:", err);
+    }
+  }
+
   return (
     <div
       class={`px-4 py-3 cursor-pointer transition-colors group ${leftAccentClass(dl().status)} ${
@@ -291,6 +302,12 @@ export default function DownloadCard(props: Props) {
                 class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
               >
                 Open Folder
+              </button>
+              <button
+                onClick={handleRedownload}
+                class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
+              >
+                Redownload
               </button>
             </div>
           </Show>
