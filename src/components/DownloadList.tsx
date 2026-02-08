@@ -38,6 +38,7 @@ function statusColor(status: string): string {
 
 interface Props {
   refreshTrigger: number;
+  onDownloadsLoaded?: (downloads: Download[]) => void;
 }
 
 export default function DownloadList(props: Props) {
@@ -50,6 +51,7 @@ export default function DownloadList(props: Props) {
     try {
       const list = await getDownloads();
       setDownloads(list);
+      props.onDownloadsLoaded?.(list);
 
       // Subscribe to progress for active downloads
       for (const dl of list) {
