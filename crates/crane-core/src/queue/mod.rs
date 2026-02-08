@@ -245,6 +245,75 @@ impl QueueManager {
         Ok(())
     }
 
+    /// Retry a failed download by resetting its status to pending.
+    /// `check_pending()` will pick it up on the next cycle.
+    pub async fn retry(&self, id: &str) -> Result<(), CraneError> {
+        let dl = self.db.get_download(id)?;
+        if dl.status != DownloadStatus::Failed {
+            return Err(CraneError::InvalidState {
+                from: dl.status.as_str().to_string(),
+                to: "pending".to_string(),
+            });
+        }
+        self.db
+            .update_download_status(id, DownloadStatus::Pending, None, None)?;
+        Ok(())
+    }
+
+    /// Delete a download. Cancel if active, remove from DB, optionally delete file.
+    pub async fn delete(&self, id: &str, delete_file: bool) -> Result<(), CraneError> {
+        // Cancel if active
+        {
+            let mut active = self.active.lock().await;
+            if let Some(handle) = active.remove(id) {
+                handle.cancel().await;
+            }
+        }
+
+        if delete_file {
+            let dl = self.db.get_download(id)?;
+            let path = std::path::Path::new(&dl.save_path);
+            if path.exists() {
+                std::fs::remove_file(path)?;
+            }
+        }
+
+        self.db.delete_download(id)?;
+        Ok(())
+    }
+
+    /// Pause all active downloads.
+    pub async fn pause_all(&self) -> Result<Vec<String>, CraneError> {
+        let active_ids: Vec<String> = {
+            let active = self.active.lock().await;
+            active.keys().cloned().collect()
+        };
+        let mut paused = Vec::new();
+        for id in active_ids {
+            if self.pause(&id).await.is_ok() {
+                paused.push(id);
+            }
+        }
+        Ok(paused)
+    }
+
+    /// Resume all paused downloads.
+    pub async fn resume_all(&self) -> Result<Vec<String>, CraneError> {
+        let paused = self.db.get_downloads_by_status(DownloadStatus::Paused)?;
+        let mut resumed = Vec::new();
+        for dl in paused {
+            if self.resume(&dl.id).await.is_ok() {
+                resumed.push(dl.id);
+            }
+        }
+        Ok(resumed)
+    }
+
+    /// Delete all completed downloads from the database.
+    pub async fn delete_completed(&self) -> Result<u64, CraneError> {
+        self.db.delete_completed_downloads()
+    }
+
     /// Pick up externally-inserted pending downloads (e.g., from the native messaging sidecar).
     /// For each pending download not already in the active map, starts it if there's capacity
     /// or queues it otherwise. Returns the IDs of downloads that were started.
@@ -738,7 +807,239 @@ mod tests {
         );
     }
 
-    // ── Test 11: check_pending queues when at capacity ──
+    // ── Test 11: retry resets failed download to pending ──
+
+    #[tokio::test]
+    async fn test_retry_resets_failed_to_pending() {
+        let db = make_db();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        // Insert a failed download directly into DB
+        let dl = Download {
+            id: "retry-1".to_string(),
+            url: "https://example.com/file.bin".to_string(),
+            filename: "file.bin".to_string(),
+            save_path: "/tmp/file.bin".to_string(),
+            total_size: Some(1024),
+            downloaded_size: 0,
+            status: DownloadStatus::Failed,
+            error_message: Some("timeout".to_string()),
+            error_code: None,
+            mime_type: None,
+            category: FileCategory::Other,
+            resumable: true,
+            connections: 4,
+            speed: 0.0,
+            source_domain: None,
+            referrer: None,
+            cookies: None,
+            user_agent: None,
+            queue_position: None,
+            retry_count: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: None,
+            completed_at: None,
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_download(&dl).unwrap();
+
+        qm.retry("retry-1").await.unwrap();
+
+        let fetched = db.get_download("retry-1").unwrap();
+        assert_eq!(fetched.status, DownloadStatus::Pending);
+        assert!(fetched.error_message.is_none());
+    }
+
+    // ── Test 12: retry rejects non-failed download ──
+
+    #[tokio::test]
+    async fn test_retry_rejects_non_failed() {
+        let db = make_db();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let dl = Download {
+            id: "retry-2".to_string(),
+            url: "https://example.com/file.bin".to_string(),
+            filename: "file.bin".to_string(),
+            save_path: "/tmp/file.bin".to_string(),
+            total_size: Some(1024),
+            downloaded_size: 0,
+            status: DownloadStatus::Downloading,
+            error_message: None,
+            error_code: None,
+            mime_type: None,
+            category: FileCategory::Other,
+            resumable: true,
+            connections: 4,
+            speed: 0.0,
+            source_domain: None,
+            referrer: None,
+            cookies: None,
+            user_agent: None,
+            queue_position: None,
+            retry_count: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: None,
+            completed_at: None,
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_download(&dl).unwrap();
+
+        let result = qm.retry("retry-2").await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            CraneError::InvalidState { .. }
+        ));
+    }
+
+    // ── Test 13: delete removes download from DB ──
+
+    #[tokio::test]
+    async fn test_delete_removes_from_db() {
+        let db = make_db();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let dl = Download {
+            id: "del-1".to_string(),
+            url: "https://example.com/file.bin".to_string(),
+            filename: "file.bin".to_string(),
+            save_path: "/tmp/del-1.bin".to_string(),
+            total_size: Some(1024),
+            downloaded_size: 0,
+            status: DownloadStatus::Pending,
+            error_message: None,
+            error_code: None,
+            mime_type: None,
+            category: FileCategory::Other,
+            resumable: true,
+            connections: 4,
+            speed: 0.0,
+            source_domain: None,
+            referrer: None,
+            cookies: None,
+            user_agent: None,
+            queue_position: None,
+            retry_count: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: None,
+            completed_at: None,
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_download(&dl).unwrap();
+
+        qm.delete("del-1", false).await.unwrap();
+
+        assert!(matches!(
+            db.get_download("del-1"),
+            Err(CraneError::NotFound(_))
+        ));
+    }
+
+    // ── Test 14: delete with file removal ──
+
+    #[tokio::test]
+    async fn test_delete_with_file_removal() {
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let file_path = tmp.path().join("deleteme.bin");
+        std::fs::write(&file_path, b"test data").unwrap();
+        assert!(file_path.exists());
+
+        let dl = Download {
+            id: "del-2".to_string(),
+            url: "https://example.com/deleteme.bin".to_string(),
+            filename: "deleteme.bin".to_string(),
+            save_path: file_path.to_string_lossy().to_string(),
+            total_size: Some(9),
+            downloaded_size: 9,
+            status: DownloadStatus::Completed,
+            error_message: None,
+            error_code: None,
+            mime_type: None,
+            category: FileCategory::Other,
+            resumable: true,
+            connections: 1,
+            speed: 0.0,
+            source_domain: None,
+            referrer: None,
+            cookies: None,
+            user_agent: None,
+            queue_position: None,
+            retry_count: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: None,
+            completed_at: None,
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_download(&dl).unwrap();
+
+        qm.delete("del-2", true).await.unwrap();
+
+        assert!(!file_path.exists(), "file should be deleted");
+        assert!(matches!(
+            db.get_download("del-2"),
+            Err(CraneError::NotFound(_))
+        ));
+    }
+
+    // ── Test 15: delete_completed removes only completed downloads ──
+
+    #[tokio::test]
+    async fn test_delete_completed() {
+        let db = make_db();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        for (id, status) in [
+            ("dc-1", DownloadStatus::Completed),
+            ("dc-2", DownloadStatus::Pending),
+            ("dc-3", DownloadStatus::Completed),
+            ("dc-4", DownloadStatus::Failed),
+        ] {
+            let dl = Download {
+                id: id.to_string(),
+                url: format!("https://example.com/{id}.bin"),
+                filename: format!("{id}.bin"),
+                save_path: format!("/tmp/{id}.bin"),
+                total_size: Some(1024),
+                downloaded_size: 0,
+                status,
+                error_message: None,
+                error_code: None,
+                mime_type: None,
+                category: FileCategory::Other,
+                resumable: true,
+                connections: 1,
+                speed: 0.0,
+                source_domain: None,
+                referrer: None,
+                cookies: None,
+                user_agent: None,
+                queue_position: None,
+                retry_count: 0,
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                started_at: None,
+                completed_at: None,
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+            };
+            db.insert_download(&dl).unwrap();
+        }
+
+        let deleted = qm.delete_completed().await.unwrap();
+        assert_eq!(deleted, 2);
+
+        // Completed downloads should be gone
+        assert!(matches!(db.get_download("dc-1"), Err(CraneError::NotFound(_))));
+        assert!(matches!(db.get_download("dc-3"), Err(CraneError::NotFound(_))));
+
+        // Others should remain
+        assert!(db.get_download("dc-2").is_ok());
+        assert!(db.get_download("dc-4").is_ok());
+    }
+
+    // ── Test 16: check_pending queues when at capacity ──
 
     #[tokio::test]
     async fn test_check_pending_queues_when_at_capacity() {

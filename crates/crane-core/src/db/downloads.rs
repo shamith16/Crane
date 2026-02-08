@@ -374,6 +374,15 @@ impl Database {
         Ok(count as u32)
     }
 
+    /// Delete all completed downloads. Returns number of deleted rows.
+    pub fn delete_completed_downloads(&self) -> Result<u64, CraneError> {
+        let count = self
+            .conn()
+            .execute("DELETE FROM downloads WHERE status = 'completed'", [])
+            .map_err(|e| CraneError::Database(e.to_string()))?;
+        Ok(count as u64)
+    }
+
     /// Get the maximum queue position among queued downloads.
     pub fn get_max_queue_position(&self) -> Result<Option<u32>, CraneError> {
         let result: Option<i64> = self
@@ -627,6 +636,43 @@ mod tests {
 
         let max = db.get_max_queue_position().unwrap();
         assert_eq!(max, Some(10));
+    }
+
+    #[test]
+    fn test_delete_completed_downloads() {
+        let db = Database::open_in_memory().unwrap();
+
+        let dl1 = make_test_download("dl-1", DownloadStatus::Completed);
+        let dl2 = make_test_download("dl-2", DownloadStatus::Downloading);
+        let dl3 = make_test_download("dl-3", DownloadStatus::Completed);
+        let dl4 = make_test_download("dl-4", DownloadStatus::Pending);
+
+        db.insert_download(&dl1).unwrap();
+        db.insert_download(&dl2).unwrap();
+        db.insert_download(&dl3).unwrap();
+        db.insert_download(&dl4).unwrap();
+
+        let deleted = db.delete_completed_downloads().unwrap();
+        assert_eq!(deleted, 2);
+
+        // Completed ones should be gone
+        assert!(matches!(db.get_download("dl-1"), Err(CraneError::NotFound(_))));
+        assert!(matches!(db.get_download("dl-3"), Err(CraneError::NotFound(_))));
+
+        // Non-completed ones should remain
+        assert!(db.get_download("dl-2").is_ok());
+        assert!(db.get_download("dl-4").is_ok());
+    }
+
+    #[test]
+    fn test_delete_completed_downloads_returns_zero_when_none() {
+        let db = Database::open_in_memory().unwrap();
+
+        let dl1 = make_test_download("dl-1", DownloadStatus::Pending);
+        db.insert_download(&dl1).unwrap();
+
+        let deleted = db.delete_completed_downloads().unwrap();
+        assert_eq!(deleted, 0);
     }
 
     #[test]

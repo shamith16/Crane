@@ -53,6 +53,43 @@ pub async fn get_download(state: State<'_, AppState>, id: String) -> Result<Down
 }
 
 #[tauri::command]
+pub async fn retry_download(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state.queue.retry(&id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_download(
+    state: State<'_, AppState>,
+    id: String,
+    delete_file: bool,
+) -> Result<(), String> {
+    state
+        .queue
+        .delete(&id, delete_file)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn pause_all_downloads(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.queue.pause_all().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn resume_all_downloads(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.queue.resume_all().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_completed(state: State<'_, AppState>) -> Result<u64, String> {
+    state
+        .queue
+        .delete_completed()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn subscribe_progress(
     state: State<'_, AppState>,
     download_id: String,

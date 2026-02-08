@@ -64,6 +64,11 @@ fn main() {
             commands::downloads::get_downloads,
             commands::downloads::get_download,
             commands::downloads::subscribe_progress,
+            commands::downloads::retry_download,
+            commands::downloads::delete_download,
+            commands::downloads::pause_all_downloads,
+            commands::downloads::resume_all_downloads,
+            commands::downloads::delete_completed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
