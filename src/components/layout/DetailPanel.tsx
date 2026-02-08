@@ -38,6 +38,7 @@ function ActionButton(props: {
   label: string;
   onClick: () => void;
   variant?: "primary" | "danger" | "default";
+  disabled?: boolean;
 }) {
   const cls = () => {
     switch (props.variant) {
@@ -52,7 +53,8 @@ function ActionButton(props: {
   return (
     <button
       onClick={props.onClick}
-      class={`px-3 py-1.5 text-xs rounded transition-colors ${cls()}`}
+      disabled={props.disabled}
+      class={`px-3 py-1.5 text-xs rounded transition-colors ${cls()} disabled:opacity-50 disabled:cursor-not-allowed`}
     >
       {props.label}
     </button>
@@ -69,49 +71,38 @@ function SectionTitle(props: { children: string }) {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "\u2014";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function computeDuration(started: string | null, completed: string | null): string {
   if (!started || !completed) return "\u2014";
-  try {
-    const ms = new Date(completed).getTime() - new Date(started).getTime();
-    if (ms < 0) return "\u2014";
-    const totalSec = Math.round(ms / 1000);
-    if (totalSec < 60) return `${totalSec}s`;
-    if (totalSec < 3600) {
-      const m = Math.floor(totalSec / 60);
-      const s = totalSec % 60;
-      return `${m}m ${s}s`;
-    }
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    return `${h}h ${m}m`;
-  } catch {
-    return "\u2014";
+  const ms = new Date(completed).getTime() - new Date(started).getTime();
+  if (isNaN(ms) || ms < 0) return "\u2014";
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  if (totalSec < 3600) {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}m ${s}s`;
   }
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  return `${h}h ${m}m`;
 }
 
 function computeAvgSpeed(size: number, started: string | null, completed: string | null): string {
   if (!started || !completed || size <= 0) return "\u2014";
-  try {
-    const ms = new Date(completed).getTime() - new Date(started).getTime();
-    if (ms <= 0) return "\u2014";
-    return formatSpeed(size / (ms / 1000));
-  } catch {
-    return "\u2014";
-  }
+  const ms = new Date(completed).getTime() - new Date(started).getTime();
+  if (isNaN(ms) || ms <= 0) return "\u2014";
+  return formatSpeed(size / (ms / 1000));
 }
 
 // ─── Active State ────────────────────────────────
@@ -326,12 +317,12 @@ function CompletedPanel(props: { download: Download }) {
             {filePath() ?? dl().save_path}
           </p>
         </div>
-        <MetaRow label="Size" value={formatSize(dl().downloaded_size || dl().total_size)} />
+        <MetaRow label="Size" value={formatSize(dl().downloaded_size ?? dl().total_size)} />
         <MetaRow label="Duration" value={computeDuration(dl().started_at, dl().completed_at)} />
         <MetaRow
           label="Average Speed"
           value={computeAvgSpeed(
-            dl().downloaded_size || dl().total_size || 0,
+            dl().downloaded_size ?? dl().total_size ?? 0,
             dl().started_at,
             dl().completed_at,
           )}
@@ -368,37 +359,38 @@ function CompletedPanel(props: { download: Download }) {
           <ActionButton
             label={hashLoading() ? "Calculating..." : "Calculate"}
             onClick={handleCalculateHash}
+            disabled={hashLoading()}
           />
         </div>
         <Show when={hashResult()}>
-          <div class="bg-bg rounded p-2">
-            <p class="text-[10px] text-text-muted mb-1">{hashAlgo().toUpperCase()}</p>
-            <p class="text-xs text-text-secondary break-all font-mono select-all">
-              {hashResult()}
-            </p>
-          </div>
-        </Show>
-        <Show when={hashResult()}>
-          <div>
-            <p class="text-[10px] uppercase tracking-wider text-text-muted mb-1">
-              Verify (paste expected hash)
-            </p>
-            <input
-              type="text"
-              value={verifyInput()}
-              onInput={(e) => setVerifyInput(e.currentTarget.value)}
-              placeholder="Paste hash to compare..."
-              class="w-full text-xs bg-bg border border-border rounded px-2 py-1.5 text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-active"
-            />
-            <Show when={verifyMatch() !== null}>
-              <p
-                class={`text-xs mt-1 font-medium ${
-                  verifyMatch() ? "text-success" : "text-error"
-                }`}
-              >
-                {verifyMatch() ? "Match" : "Mismatch"}
+          <div class="space-y-2">
+            <div class="bg-bg rounded p-2">
+              <p class="text-[10px] text-text-muted mb-1">{hashAlgo().toUpperCase()}</p>
+              <p class="text-xs text-text-secondary break-all font-mono select-all">
+                {hashResult()}
               </p>
-            </Show>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                Verify (paste expected hash)
+              </p>
+              <input
+                type="text"
+                value={verifyInput()}
+                onInput={(e) => setVerifyInput(e.currentTarget.value)}
+                placeholder="Paste hash to compare..."
+                class="w-full text-xs bg-bg border border-border rounded px-2 py-1.5 text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-active"
+              />
+              <Show when={verifyMatch() !== null}>
+                <p
+                  class={`text-xs mt-1 font-medium ${
+                    verifyMatch() ? "text-success" : "text-error"
+                  }`}
+                >
+                  {verifyMatch() ? "Match" : "Mismatch"}
+                </p>
+              </Show>
+            </div>
           </div>
         </Show>
       </div>
@@ -490,36 +482,28 @@ function FailedPanel(props: { download: Download }) {
 
 export default function DetailPanel() {
   const [download, setDownload] = createSignal<Download | null>(null);
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   createEffect(() => {
     const id = selectedDownloadId();
 
-    // Clear previous polling
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+    if (!id) {
+      setDownload(null);
+      return;
     }
 
-    if (id) {
-      // Initial fetch
+    // Initial fetch
+    getDownload(id)
+      .then((dl) => setDownload(dl))
+      .catch(() => setDownload(null));
+
+    // Poll for status changes (e.g. downloading -> completed)
+    const interval = setInterval(() => {
       getDownload(id)
         .then((dl) => setDownload(dl))
-        .catch(() => setDownload(null));
+        .catch(() => {});
+    }, 2000);
 
-      // Poll for status changes (e.g. downloading -> completed)
-      pollInterval = setInterval(() => {
-        getDownload(id)
-          .then((dl) => setDownload(dl))
-          .catch(() => {});
-      }, 2000);
-    } else {
-      setDownload(null);
-    }
-  });
-
-  onCleanup(() => {
-    if (pollInterval) clearInterval(pollInterval);
+    onCleanup(() => clearInterval(interval));
   });
 
   const isActive = () => {
