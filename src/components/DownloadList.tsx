@@ -27,12 +27,12 @@ function formatSpeed(bytesPerSec: number): string {
 
 function statusColor(status: string): string {
   switch (status) {
-    case "downloading": return "text-blue-400";
-    case "completed": return "text-green-400";
-    case "failed": return "text-red-400";
-    case "paused": return "text-amber-400";
-    case "queued": return "text-[#888]";
-    default: return "text-[#888]";
+    case "downloading": return "text-active";
+    case "completed": return "text-success";
+    case "failed": return "text-error";
+    case "paused": return "text-warning";
+    case "queued": return "text-text-secondary";
+    default: return "text-text-secondary";
   }
 }
 
@@ -129,31 +129,31 @@ export default function DownloadList(props: Props) {
         when={downloads().length > 0}
         fallback={
           <div class="flex items-center justify-center h-full">
-            <p class="text-sm text-[#666]">No downloads yet. Paste a URL above to start.</p>
+            <p class="text-sm text-text-muted">No downloads yet. Paste a URL above to start.</p>
           </div>
         }
       >
-        <div class="divide-y divide-[#1A1A1A]">
+        <div class="divide-y divide-surface">
           <For each={downloads()}>
             {(dl) => {
               const progress = () => getProgress(dl);
               const pct = () => percentComplete(dl);
 
               return (
-                <div class="px-4 py-3 hover:bg-[#1A1A1A] transition-colors group">
+                <div class="px-4 py-3 hover:bg-surface transition-colors group">
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex-1 min-w-0">
-                      <p class="text-sm text-[#E8E8E8] truncate">{dl.filename}</p>
+                      <p class="text-sm text-text-primary truncate">{dl.filename}</p>
                       <div class="flex items-center gap-3 mt-1 text-xs tabular-nums">
                         <span class={statusColor(dl.status)}>
                           {dl.status}
                         </span>
-                        <span class="text-[#666]">
+                        <span class="text-text-muted">
                           {formatSize(progress().downloaded)}
                           {progress().total ? ` / ${formatSize(progress().total)}` : ""}
                         </span>
                         {dl.status === "downloading" && (
-                          <span class="text-[#888]">{formatSpeed(progress().speed)}</span>
+                          <span class="text-text-secondary">{formatSpeed(progress().speed)}</span>
                         )}
                       </div>
                     </div>
@@ -162,7 +162,7 @@ export default function DownloadList(props: Props) {
                       {dl.status === "downloading" && (
                         <button
                           onClick={() => handlePause(dl.id)}
-                          class="px-2.5 py-1 text-xs bg-[#2A2A2A] hover:bg-[#333] text-[#E8E8E8] rounded"
+                          class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
                         >
                           Pause
                         </button>
@@ -170,7 +170,7 @@ export default function DownloadList(props: Props) {
                       {dl.status === "paused" && (
                         <button
                           onClick={() => handleResume(dl.id)}
-                          class="px-2.5 py-1 text-xs bg-[#2A2A2A] hover:bg-[#333] text-[#E8E8E8] rounded"
+                          class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
                         >
                           Resume
                         </button>
@@ -178,7 +178,7 @@ export default function DownloadList(props: Props) {
                       {(dl.status === "downloading" || dl.status === "paused" || dl.status === "queued") && (
                         <button
                           onClick={() => handleCancel(dl.id)}
-                          class="px-2.5 py-1 text-xs bg-[#2A2A2A] hover:bg-red-900/50 text-[#E8E8E8] rounded"
+                          class="px-2.5 py-1 text-xs bg-border hover:bg-error/20 text-text-primary rounded"
                         >
                           Cancel
                         </button>
@@ -187,10 +187,10 @@ export default function DownloadList(props: Props) {
                   </div>
 
                   {(dl.status === "downloading" || dl.status === "paused") && (
-                    <div class="mt-2 h-1 bg-[#1A1A1A] rounded-full overflow-hidden">
+                    <div class="mt-2 h-1 bg-surface rounded-full overflow-hidden">
                       <div
                         class={`h-full rounded-full transition-all duration-300 ${
-                          dl.status === "paused" ? "bg-amber-400" : "bg-[#4A9EFF]"
+                          dl.status === "paused" ? "bg-warning" : "bg-active"
                         }`}
                         style={{ width: `${pct()}%` }}
                       />
@@ -198,7 +198,7 @@ export default function DownloadList(props: Props) {
                   )}
 
                   {dl.error_message && (
-                    <p class="mt-1 text-xs text-red-400">{dl.error_message}</p>
+                    <p class="mt-1 text-xs text-error">{dl.error_message}</p>
                   )}
                 </div>
               );

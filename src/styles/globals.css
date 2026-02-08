@@ -1,1 +1,54 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #0D0D0D;
+    --surface: #161616;
+    --surface-hover: #1E1E1E;
+    --border: #2A2A2A;
+    --text-primary: #E8E8E8;
+    --text-secondary: #888888;
+    --text-muted: #555555;
+    --active: #3B82F6;
+    --success: #22C55E;
+    --warning: #F59E0B;
+    --error: #EF4444;
+    --accent: #8B5CF6;
+  }
+
+  .light {
+    --bg: #FAFAFA;
+    --surface: #FFFFFF;
+    --surface-hover: #F5F5F5;
+    --border: #E5E5E5;
+    --text-primary: #1A1A1A;
+    --text-secondary: #666666;
+    --text-muted: #999999;
+    --active: #2563EB;
+    --success: #16A34A;
+    --warning: #D97706;
+    --error: #DC2626;
+    --accent: #7C3AED;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-active: var(--active);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-accent: var(--accent);
+}

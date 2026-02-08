@@ -68,7 +68,7 @@ export default function UrlInput(props: Props) {
   }
 
   return (
-    <div class="border-b border-[#2A2A2A] p-4">
+    <div class="border-b border-border p-4">
       <div class="flex gap-2">
         <input
           type="text"
@@ -80,14 +80,14 @@ export default function UrlInput(props: Props) {
           }}
           onKeyDown={handleKeyDown}
           placeholder="Paste a download URL..."
-          class="flex-1 bg-[#1A1A1A] border border-[#333] rounded-lg px-4 py-2.5 text-sm text-[#E8E8E8] placeholder-[#666] outline-none focus:border-[#4A9EFF] transition-colors"
+          class="flex-1 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active transition-colors"
           disabled={loading()}
         />
         {!analysis() ? (
           <button
             onClick={handleAnalyze}
             disabled={loading() || !url().trim()}
-            class="px-5 py-2.5 bg-[#2A2A2A] hover:bg-[#333] text-sm text-[#E8E8E8] rounded-lg disabled:opacity-40 transition-colors"
+            class="px-5 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-primary rounded-lg disabled:opacity-40 transition-colors"
           >
             {loading() ? "Analyzing..." : "Analyze"}
           </button>
@@ -95,7 +95,7 @@ export default function UrlInput(props: Props) {
           <button
             onClick={handleDownload}
             disabled={loading()}
-            class="px-5 py-2.5 bg-[#4A9EFF] hover:bg-[#3A8EEF] text-sm text-white font-medium rounded-lg disabled:opacity-40 transition-colors"
+            class="px-5 py-2.5 bg-active hover:bg-active/80 text-sm text-white font-medium rounded-lg disabled:opacity-40 transition-colors"
           >
             {loading() ? "Starting..." : "Download"}
           </button>
@@ -103,16 +103,16 @@ export default function UrlInput(props: Props) {
       </div>
 
       {error() && (
-        <p class="mt-2 text-xs text-red-400">{error()}</p>
+        <p class="mt-2 text-xs text-error">{error()}</p>
       )}
 
       {analysis() && (
-        <div class="mt-3 flex items-center gap-4 text-xs text-[#888]">
-          <span class="text-[#E8E8E8] font-medium">{analysis()!.filename}</span>
+        <div class="mt-3 flex items-center gap-4 text-xs text-text-secondary">
+          <span class="text-text-primary font-medium">{analysis()!.filename}</span>
           <span>{formatSize(analysis()!.total_size)}</span>
           <span class="capitalize">{analysis()!.category}</span>
           {analysis()!.resumable && (
-            <span class="text-green-400">Resumable</span>
+            <span class="text-success">Resumable</span>
           )}
         </div>
       )}
