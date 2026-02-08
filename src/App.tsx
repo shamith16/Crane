@@ -3,6 +3,7 @@ import UrlInput from "./components/UrlInput";
 import DownloadList from "./components/DownloadList";
 import Sidebar from "./components/layout/Sidebar";
 import DetailPanel from "./components/layout/DetailPanel";
+import CommandPalette from "./components/command-palette/CommandPalette";
 import { applyTheme } from "./lib/theme";
 import type { Download } from "./lib/types";
 
@@ -29,6 +30,7 @@ export default function App() {
         />
         <DetailPanel />
       </div>
+      <CommandPalette downloads={downloads()} />
     </div>
   );
 }
