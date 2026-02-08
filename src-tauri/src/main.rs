@@ -14,6 +14,8 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Initialize database
             let data_dir = dirs::data_dir()
@@ -24,11 +26,28 @@ fn main() {
             let db_path = data_dir.join("crane.db");
             let db = Arc::new(Database::open(&db_path).expect("Cannot open database"));
 
-            // Default save directory
-            let save_dir = dirs::download_dir()
-                .unwrap_or_else(|| dirs::home_dir().unwrap().join("Downloads"))
-                .to_string_lossy()
-                .to_string();
+            // Initialize config
+            let config_dir = dirs::config_dir()
+                .expect("Cannot determine config directory")
+                .join("crane");
+            let config_path = config_dir.join("config.toml");
+            let config_manager = crane_core::config::ConfigManager::load(&config_path)
+                .expect("Cannot load config");
+
+            // Use config for save dir
+            let save_dir = {
+                let loc = &config_manager.get().general.download_location;
+                if loc.is_empty() {
+                    dirs::download_dir()
+                        .unwrap_or_else(|| dirs::home_dir().unwrap().join("Downloads"))
+                        .to_string_lossy()
+                        .to_string()
+                } else {
+                    loc.clone()
+                }
+            };
+
+            let config = Arc::new(tokio::sync::Mutex::new(config_manager));
 
             // Create queue manager (max 3 concurrent downloads)
             let queue = Arc::new(QueueManager::new(db, 3));
@@ -47,6 +66,7 @@ fn main() {
 
             app.manage(AppState {
                 queue,
+                config,
                 default_save_dir: save_dir,
             });
 
@@ -69,6 +89,18 @@ fn main() {
             commands::downloads::pause_all_downloads,
             commands::downloads::resume_all_downloads,
             commands::downloads::delete_completed,
+            commands::settings::get_settings,
+            commands::settings::update_settings,
+            commands::settings::get_config_path,
+            commands::settings::open_config_file,
+            commands::settings::export_settings,
+            commands::settings::import_settings,
+            commands::settings::reset_settings,
+            commands::files::open_file,
+            commands::files::open_folder,
+            commands::files::calculate_hash,
+            commands::files::get_download_path,
+            commands::system::get_app_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
