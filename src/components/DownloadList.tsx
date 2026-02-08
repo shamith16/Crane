@@ -1,40 +1,79 @@
-import { For, Show, createSignal, onMount, onCleanup } from "solid-js";
-import {
-  getDownloads,
-  pauseDownload,
-  resumeDownload,
-  cancelDownload,
-  subscribeProgress,
-} from "../lib/commands";
+import { For, Show, createSignal, createMemo, onMount, onCleanup } from "solid-js";
+import { getDownloads, subscribeProgress } from "../lib/commands";
 import type { Download, DownloadProgress } from "../lib/types";
+import { statusFilter, categoryFilter } from "../stores/ui";
+import DownloadCard from "./downloads/DownloadCard";
+import FloatingActionBar from "./shared/FloatingActionBar";
 
-function formatSize(bytes: number | null): string {
-  if (bytes === null || bytes === 0) return "\u2014";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let size = bytes;
-  while (size >= 1024 && i < units.length - 1) {
-    size /= 1024;
-    i++;
+// ─── Group definitions ──────────────────────────
+
+interface DownloadGroup {
+  key: string;
+  label: string;
+  downloads: Download[];
+  collapsible: boolean;
+}
+
+const GROUP_ORDER = ["active", "queued", "completed", "failed"] as const;
+
+function groupDownloads(downloads: Download[]): DownloadGroup[] {
+  const buckets: Record<string, Download[]> = {
+    active: [],
+    queued: [],
+    completed: [],
+    failed: [],
+  };
+
+  for (const dl of downloads) {
+    switch (dl.status) {
+      case "downloading":
+      case "analyzing":
+      case "paused":
+      case "pending":
+        buckets.active.push(dl);
+        break;
+      case "queued":
+        buckets.queued.push(dl);
+        break;
+      case "completed":
+        buckets.completed.push(dl);
+        break;
+      case "failed":
+        buckets.failed.push(dl);
+        break;
+    }
   }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+
+  const groups: DownloadGroup[] = [];
+  for (const key of GROUP_ORDER) {
+    if (buckets[key].length > 0) {
+      groups.push({
+        key,
+        label: groupLabel(key, buckets[key].length),
+        downloads: buckets[key],
+        collapsible: key === "completed" || key === "failed",
+      });
+    }
+  }
+  return groups;
 }
 
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec <= 0) return "\u2014";
-  return `${formatSize(bytesPerSec)}/s`;
-}
-
-function statusColor(status: string): string {
-  switch (status) {
-    case "downloading": return "text-active";
-    case "completed": return "text-success";
-    case "failed": return "text-error";
-    case "paused": return "text-warning";
-    case "queued": return "text-text-secondary";
-    default: return "text-text-secondary";
+function groupLabel(key: string, count: number): string {
+  switch (key) {
+    case "active":
+      return `Active (${count})`;
+    case "queued":
+      return `Queued (${count})`;
+    case "completed":
+      return `Completed (${count})`;
+    case "failed":
+      return `Failed (${count})`;
+    default:
+      return key;
   }
 }
+
+// ─── Component ──────────────────────────────────
 
 interface Props {
   refreshTrigger: number;
@@ -44,8 +83,11 @@ interface Props {
 export default function DownloadList(props: Props) {
   const [downloads, setDownloads] = createSignal<Download[]>([]);
   const [progressMap, setProgressMap] = createSignal<Record<string, DownloadProgress>>({});
+  const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set());
   let pollInterval: ReturnType<typeof setInterval>;
   const subscribedIds = new Set<string>();
+
+  // ─── Data fetching ────────────────────────────
 
   async function refresh() {
     try {
@@ -77,137 +119,122 @@ export default function DownloadList(props: Props) {
   });
 
   // Re-fetch when refreshTrigger changes
-  const _trigger = () => {
-    void props.refreshTrigger;
+  createMemo(() => {
+    // Access the prop to track it
+    const _ = props.refreshTrigger;
     refresh();
-  };
+  });
 
-  function getProgress(dl: Download): { downloaded: number; total: number | null; speed: number } {
-    const p = progressMap()[dl.id];
-    if (p) {
-      return { downloaded: p.downloaded_size, total: p.total_size, speed: p.speed };
+  // ─── Filtering ────────────────────────────────
+
+  const filteredDownloads = createMemo(() => {
+    let list = downloads();
+
+    const sf = statusFilter();
+    if (sf !== "all") {
+      list = list.filter((dl) => dl.status === sf);
     }
-    return { downloaded: dl.downloaded_size, total: dl.total_size, speed: dl.speed };
-  }
 
-  function percentComplete(dl: Download): number {
-    const { downloaded, total } = getProgress(dl);
-    if (!total || total === 0) return 0;
-    return Math.min(100, (downloaded / total) * 100);
-  }
-
-  async function handlePause(id: string) {
-    try {
-      await pauseDownload(id);
-      refresh();
-    } catch (e) {
-      console.error("Pause failed:", e);
+    const cf = categoryFilter();
+    if (cf !== "all") {
+      list = list.filter((dl) => dl.category === cf);
     }
+
+    return list;
+  });
+
+  // ─── Grouping ─────────────────────────────────
+
+  const groups = createMemo(() => groupDownloads(filteredDownloads()));
+
+  // Flat list of visible IDs for shift-click range selection
+  const visibleIds = createMemo(() => {
+    const ids: string[] = [];
+    for (const group of groups()) {
+      if (!collapsedGroups().has(group.key)) {
+        for (const dl of group.downloads) {
+          ids.push(dl.id);
+        }
+      }
+    }
+    return ids;
+  });
+
+  // ─── Group collapse ───────────────────────────
+
+  function toggleGroupCollapse(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
-  async function handleResume(id: string) {
-    try {
-      await resumeDownload(id);
-      subscribedIds.delete(id);
-      refresh();
-    } catch (e) {
-      console.error("Resume failed:", e);
-    }
-  }
-
-  async function handleCancel(id: string) {
-    try {
-      await cancelDownload(id);
-      subscribedIds.delete(id);
-      refresh();
-    } catch (e) {
-      console.error("Cancel failed:", e);
-    }
-  }
+  // ─── Render ───────────────────────────────────
 
   return (
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-y-auto relative">
       <Show
-        when={downloads().length > 0}
+        when={filteredDownloads().length > 0}
         fallback={
           <div class="flex items-center justify-center h-full">
-            <p class="text-sm text-text-muted">No downloads yet. Paste a URL above to start.</p>
+            <p class="text-sm text-text-muted">
+              {downloads().length === 0
+                ? "No downloads yet. Paste a URL above to start."
+                : "No downloads match the current filter."}
+            </p>
           </div>
         }
       >
         <div class="divide-y divide-surface">
-          <For each={downloads()}>
-            {(dl) => {
-              const progress = () => getProgress(dl);
-              const pct = () => percentComplete(dl);
+          <For each={groups()}>
+            {(group) => {
+              const isCollapsed = () => collapsedGroups().has(group.key);
 
               return (
-                <div class="px-4 py-3 hover:bg-surface transition-colors group">
-                  <div class="flex items-center justify-between gap-4">
-                    <div class="flex-1 min-w-0">
-                      <p class="text-sm text-text-primary truncate">{dl.filename}</p>
-                      <div class="flex items-center gap-3 mt-1 text-xs tabular-nums">
-                        <span class={statusColor(dl.status)}>
-                          {dl.status}
-                        </span>
-                        <span class="text-text-muted">
-                          {formatSize(progress().downloaded)}
-                          {progress().total ? ` / ${formatSize(progress().total)}` : ""}
-                        </span>
-                        {dl.status === "downloading" && (
-                          <span class="text-text-secondary">{formatSpeed(progress().speed)}</span>
-                        )}
-                      </div>
-                    </div>
+                <div>
+                  {/* Group header */}
+                  <button
+                    class="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors select-none"
+                    onClick={() => group.collapsible && toggleGroupCollapse(group.key)}
+                  >
+                    <Show when={group.collapsible}>
+                      <span
+                        class="transition-transform duration-150"
+                        style={{
+                          display: "inline-block",
+                          transform: isCollapsed() ? "rotate(-90deg)" : "rotate(0deg)",
+                        }}
+                      >
+                        &#9662;
+                      </span>
+                    </Show>
+                    <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
+                  </button>
 
-                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {dl.status === "downloading" && (
-                        <button
-                          onClick={() => handlePause(dl.id)}
-                          class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
-                        >
-                          Pause
-                        </button>
+                  {/* Group items */}
+                  <Show when={!isCollapsed()}>
+                    <For each={group.downloads}>
+                      {(dl) => (
+                        <DownloadCard
+                          download={dl}
+                          progress={progressMap()[dl.id]}
+                          onRefresh={refresh}
+                          visibleIds={visibleIds()}
+                        />
                       )}
-                      {dl.status === "paused" && (
-                        <button
-                          onClick={() => handleResume(dl.id)}
-                          class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
-                        >
-                          Resume
-                        </button>
-                      )}
-                      {(dl.status === "downloading" || dl.status === "paused" || dl.status === "queued") && (
-                        <button
-                          onClick={() => handleCancel(dl.id)}
-                          class="px-2.5 py-1 text-xs bg-border hover:bg-error/20 text-text-primary rounded"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {(dl.status === "downloading" || dl.status === "paused") && (
-                    <div class="mt-2 h-1 bg-surface rounded-full overflow-hidden">
-                      <div
-                        class={`h-full rounded-full transition-all duration-300 ${
-                          dl.status === "paused" ? "bg-warning" : "bg-active"
-                        }`}
-                        style={{ width: `${pct()}%` }}
-                      />
-                    </div>
-                  )}
-
-                  {dl.error_message && (
-                    <p class="mt-1 text-xs text-error">{dl.error_message}</p>
-                  )}
+                    </For>
+                  </Show>
                 </div>
               );
             }}
           </For>
         </div>
       </Show>
+
+      {/* Floating action bar for multi-select */}
+      <FloatingActionBar onRefresh={refresh} />
     </div>
   );
 }
