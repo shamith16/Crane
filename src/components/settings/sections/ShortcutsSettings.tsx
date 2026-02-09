@@ -14,6 +14,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: "Escape", description: "Close panel / modal / deselect" },
   { keys: "\u2318A", description: "Select all downloads" },
   { keys: "\u2318O", description: "Open file" },
+  { keys: "\u2318V", description: "Paste URL and start analysis" },
   { keys: "\u2318\u21E7O", description: "Open containing folder" },
 ];
 

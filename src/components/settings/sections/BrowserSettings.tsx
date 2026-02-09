@@ -34,11 +34,11 @@ export default function BrowserSettings() {
             <span
               class={`text-xs font-medium px-2 py-1 rounded-full ${
                 testStatus() === "connected"
-                  ? "bg-green-500/20 text-green-400"
+                  ? "bg-success/20 text-success"
                   : testStatus() === "failed"
                     ? "bg-error/20 text-error"
                     : testStatus() === "testing"
-                      ? "bg-yellow-500/20 text-yellow-400"
+                      ? "bg-warning/20 text-warning"
                       : "bg-surface-hover text-text-muted"
               }`}
             >
