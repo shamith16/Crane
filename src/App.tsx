@@ -1,9 +1,11 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 import UrlInput from "./components/UrlInput";
 import DownloadList from "./components/DownloadList";
 import Sidebar from "./components/layout/Sidebar";
 import DetailPanel from "./components/layout/DetailPanel";
 import CommandPalette from "./components/command-palette/CommandPalette";
+import SettingsPanel from "./components/settings/SettingsPanel";
+import { settingsOpen } from "./stores/ui";
 import { applyTheme } from "./lib/theme";
 import type { Download } from "./lib/types";
 
@@ -31,6 +33,9 @@ export default function App() {
         <DetailPanel />
       </div>
       <CommandPalette downloads={downloads()} />
+      <Show when={settingsOpen()}>
+        <SettingsPanel />
+      </Show>
     </div>
   );
 }
