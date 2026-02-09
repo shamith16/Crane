@@ -1,4 +1,5 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
+import { open } from "@tauri-apps/plugin-shell";
 import { commandPaletteOpen, setCommandPaletteOpen, setSettingsOpen, toggleSidebar, setSelectedDownloadId } from "../../stores/ui";
 import { pauseAll, resumeAll, deleteCompleted, getSettings } from "../../lib/commands";
 import CommandItem from "./CommandItem";
@@ -150,9 +151,7 @@ export default function CommandPalette(props: Props) {
           getSettings().then((config) => {
             const loc = config.general.download_location;
             if (loc) {
-              // Use openFolder with a completed download or fall back to settings
-              // TODO: Add a dedicated open_path Tauri command
-              setSettingsOpen(true);
+              open(loc).catch(() => {});
             }
           }).catch(() => {});
         },
