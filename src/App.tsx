@@ -9,7 +9,7 @@ import DropZone from "./components/shared/DropZone";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { settingsOpen } from "./stores/ui";
 import { applyTheme } from "./lib/theme";
-import { addDownload } from "./lib/commands";
+import { addDownload, getSettings } from "./lib/commands";
 import type { Download } from "./lib/types";
 
 export default function App() {
@@ -19,7 +19,10 @@ export default function App() {
   const [downloads, setDownloads] = createSignal<Download[]>([]);
 
   onMount(() => {
-    applyTheme("dark");
+    // Load theme from saved settings, falling back to dark
+    getSettings()
+      .then((cfg) => applyTheme(cfg.appearance.theme))
+      .catch(() => applyTheme("dark"));
   });
 
   function handleDownloadAdded() {
