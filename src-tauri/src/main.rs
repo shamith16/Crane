@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod notifications;
 mod state;
 mod tray;
 
@@ -52,14 +53,24 @@ fn main() {
             // Create queue manager (max 3 concurrent downloads)
             let queue = Arc::new(QueueManager::new(db, 3));
 
-            // Spawn completion + pending monitor
+            // Spawn completion + pending monitor with notifications
             let monitor_queue = queue.clone();
             let monitor_save_dir = save_dir.clone();
+            let monitor_config = config.clone();
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
                 loop {
                     interval.tick().await;
-                    let _ = monitor_queue.check_completed().await;
+                    if let Ok(finished) = monitor_queue.check_completed().await {
+                        notifications::notify_finished(
+                            &app_handle,
+                            monitor_queue.db(),
+                            &monitor_config,
+                            &finished,
+                        )
+                        .await;
+                    }
                     let _ = monitor_queue.check_pending(&monitor_save_dir).await;
                 }
             });
