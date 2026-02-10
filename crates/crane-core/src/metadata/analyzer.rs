@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::metadata::mime::{categorize_extension, categorize_mime};
 use crate::types::{CraneError, FileCategory, UrlAnalysis};
 
@@ -12,10 +14,24 @@ pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
 
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(CraneError::Network)?;
 
-    let response = client.head(input_url).send().await?;
+    // Try HEAD first; fall back to a range-limited GET if the server doesn't
+    // support HEAD (some CDN/speed-test servers drop HEAD with an empty reply,
+    // or return 405/404 for HEAD while supporting GET).
+    let response = match client.head(input_url).send().await {
+        Ok(resp) if resp.status().is_success() => resp,
+        _ => {
+            client
+                .get(input_url)
+                .header("Range", "bytes=0-0")
+                .send()
+                .await?
+        }
+    };
     let final_url = response.url().to_string();
     let status = response.status();
 
@@ -27,22 +43,35 @@ pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
     }
 
     let headers = response.headers();
+    let used_range_get = status == reqwest::StatusCode::PARTIAL_CONTENT;
 
-    let total_size = headers
-        .get("content-length")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok());
+    // For 206 responses, extract the total size from Content-Range header
+    // (Content-Range: bytes 0-0/TOTAL), since Content-Length is just the range size.
+    let total_size = if used_range_get {
+        headers
+            .get("content-range")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.rsplit('/').next())
+            .and_then(|v| v.parse::<u64>().ok())
+    } else {
+        headers
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+    };
 
     let mime_type = headers
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.split(';').next().unwrap_or(v).trim().to_string());
 
-    let resumable = headers
-        .get("accept-ranges")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.contains("bytes"))
-        .unwrap_or(false);
+    // If we got a 206, the server supports ranges even without Accept-Ranges header.
+    let resumable = used_range_get
+        || headers
+            .get("accept-ranges")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.contains("bytes"))
+            .unwrap_or(false);
 
     let server = headers
         .get("server")
@@ -346,5 +375,29 @@ mod tests {
         let result = analyze_url(&url).await.unwrap();
 
         assert!(result.url.contains("/file.zip"));
+    }
+
+    #[tokio::test]
+    async fn test_head_fallback_to_range_get() {
+        let server = MockServer::start().await;
+
+        // Only respond to GET with Range header, not HEAD
+        Mock::given(method("GET"))
+            .and(path("/10GB.bin"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-0/10737418240")
+                    .insert_header("Content-Length", "1")
+                    .insert_header("Content-Type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/10GB.bin", server.uri());
+        let result = analyze_url(&url).await.unwrap();
+
+        assert_eq!(result.filename, "10GB.bin");
+        assert_eq!(result.total_size, Some(10737418240));
+        assert!(result.resumable);
     }
 }
