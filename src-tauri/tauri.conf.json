@@ -21,5 +21,36 @@
     "security": {
       "csp": null
     }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "category": "Productivity",
+    "copyright": "MIT OR Apache-2.0",
+    "shortDescription": "Fast, open-source download manager",
+    "longDescription": "Crane is a cross-platform download manager with multi-connection downloads, pause/resume, queue management, and browser extension integration.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "wix": null,
+      "nsis": null
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
   }
 }
