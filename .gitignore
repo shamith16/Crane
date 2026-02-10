@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+
+# Tauri
+src-tauri/target/
+
+# Firebase
+firebase-debug.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
