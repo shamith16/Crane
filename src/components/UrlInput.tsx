@@ -216,7 +216,7 @@ export default function UrlInput(props: Props) {
             }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Paste URL to download or press \u2318K for commands..."
+            placeholder="Paste URL to download or press ⌘K for commands..."
             class="flex-1 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active transition-colors"
             disabled={loading()}
           />
