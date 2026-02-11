@@ -111,13 +111,17 @@ function ActivePanel(props: { download: Download }) {
   const dl = () => props.download;
   const [progress, setProgress] = createSignal<DownloadProgress | null>(null);
   const [speedHistory, setSpeedHistory] = createSignal<number[]>([]);
+  let subscribedId: string | null = null;
 
-  // Subscribe to progress
+  // Subscribe to progress — only re-subscribe when the download ID changes,
+  // not on every poll refresh (which creates a new object with the same ID).
   createEffect(() => {
     const id = dl().id;
     const status = dl().status;
     if (status !== "downloading" && status !== "analyzing") return;
+    if (id === subscribedId) return;
 
+    subscribedId = id;
     setSpeedHistory([]);
     subscribeProgress(id, (p) => {
       setProgress(p);
