@@ -327,7 +327,8 @@ mod tests {
         let dl = db.get_download(download_id).unwrap();
         assert_eq!(dl.url, "https://example.com/report.pdf");
         assert_eq!(dl.filename, "report.pdf");
-        assert_eq!(dl.save_path, "/downloads/report.pdf");
+        let expected_path = std::path::PathBuf::from("/downloads").join("report.pdf");
+        assert_eq!(dl.save_path, expected_path.to_string_lossy());
         assert_eq!(dl.total_size, Some(123456));
         assert_eq!(dl.status, DownloadStatus::Pending);
         assert_eq!(dl.category, FileCategory::Documents);
