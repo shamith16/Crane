@@ -1,4 +1,5 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
+import { open } from "@tauri-apps/plugin-dialog";
 import { analyzeUrl, addDownload } from "../lib/commands";
 import { formatSize } from "../lib/format";
 import type { UrlAnalysis, DownloadOptions, FileCategory } from "../lib/types";
@@ -194,8 +195,11 @@ export default function UrlInput(props: Props) {
     }
   }
 
-  function selectFolder() {
-    console.log("folder picker");
+  async function selectFolder() {
+    const selected = await open({ directory: true, multiple: false });
+    if (selected) {
+      setSavePath(selected as string);
+    }
   }
 
   // ─── Render ─────────────────────────────────────
