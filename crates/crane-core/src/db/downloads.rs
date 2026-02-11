@@ -221,6 +221,20 @@ impl Database {
         Ok(downloads)
     }
 
+    /// Check whether a download with the given URL already exists in an active
+    /// state (pending, analyzing, downloading, queued, or paused).
+    pub fn has_active_url(&self, url: &str) -> Result<bool, CraneError> {
+        let conn = self.conn();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM downloads WHERE url = ?1 AND status IN ('pending', 'analyzing', 'downloading', 'queued', 'paused')",
+                params![url],
+                |row| row.get(0),
+            )
+            .map_err(|e| CraneError::Database(e.to_string()))?;
+        Ok(count > 0)
+    }
+
     /// Update the status of a download. Also sets:
     /// - `updated_at` to now
     /// - `completed_at` when status is Completed
@@ -685,5 +699,40 @@ mod tests {
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CraneError::Database(_)));
+    }
+
+    #[test]
+    fn test_has_active_url() {
+        let db = Database::open_in_memory().unwrap();
+        let url = "https://example.com/file.bin";
+
+        // No downloads yet
+        assert!(!db.has_active_url(url).unwrap());
+
+        // Insert an active download with that URL
+        let mut dl = make_test_download("dup-1", DownloadStatus::Downloading);
+        dl.url = url.to_string();
+        db.insert_download(&dl).unwrap();
+        assert!(db.has_active_url(url).unwrap());
+
+        // Different URL should not match
+        assert!(!db.has_active_url("https://example.com/other.bin").unwrap());
+
+        // Completed downloads should not count
+        db.update_download_status("dup-1", DownloadStatus::Completed, None, None)
+            .unwrap();
+        assert!(!db.has_active_url(url).unwrap());
+
+        // Failed downloads should not count
+        let mut dl2 = make_test_download("dup-2", DownloadStatus::Failed);
+        dl2.url = url.to_string();
+        db.insert_download(&dl2).unwrap();
+        assert!(!db.has_active_url(url).unwrap());
+
+        // Paused downloads should count
+        let mut dl3 = make_test_download("dup-3", DownloadStatus::Paused);
+        dl3.url = url.to_string();
+        db.insert_download(&dl3).unwrap();
+        assert!(db.has_active_url(url).unwrap());
     }
 }

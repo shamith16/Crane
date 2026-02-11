@@ -243,6 +243,9 @@ pub enum CraneError {
     #[error("Unsupported URL scheme: {0}")]
     UnsupportedScheme(String),
 
+    #[error("Duplicate URL: {0}")]
+    DuplicateUrl(String),
+
     #[error("Database error: {0}")]
     Database(String),
 }

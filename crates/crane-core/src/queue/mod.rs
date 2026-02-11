@@ -42,6 +42,11 @@ impl QueueManager {
         save_dir: &str,
         options: DownloadOptions,
     ) -> Result<String, CraneError> {
+        // Reject duplicate URLs that are already active
+        if self.db.has_active_url(url)? {
+            return Err(CraneError::DuplicateUrl(url.to_string()));
+        }
+
         // Analyze URL to get metadata (filename, size, mime, etc.)
         let analysis = analyze_url(url).await?;
 
@@ -1107,5 +1112,77 @@ mod tests {
         assert!(ext_dl.queue_position.is_some());
         // Still only 1 active
         assert_eq!(qm.active_count().await, 1);
+    }
+
+    // ── Test 17: duplicate URL is rejected while download is active ──
+
+    #[tokio::test]
+    async fn test_duplicate_url_rejected() {
+        let server = setup_server().await;
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let url = format!("{}/file.bin", server.uri());
+        let _id1 = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // Adding the same URL again should fail
+        let result = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CraneError::DuplicateUrl(_)));
+    }
+
+    // ── Test 18: same URL allowed after previous download completes ──
+
+    #[tokio::test]
+    async fn test_duplicate_url_allowed_after_completion() {
+        let server = setup_server().await;
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3);
+
+        let url = format!("{}/file.bin", server.uri());
+        let id1 = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // Wait for completion
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        qm.check_completed().await.unwrap();
+        assert_eq!(
+            db.get_download(&id1).unwrap().status,
+            DownloadStatus::Completed
+        );
+
+        // Adding the same URL again should now succeed
+        let id2 = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(id1, id2);
     }
 }
