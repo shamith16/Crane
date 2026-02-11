@@ -36,6 +36,10 @@ struct DownloadController {
     error_message: std::sync::Mutex<Option<String>>,
     on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync>,
     is_multi: AtomicBool,
+    /// Previous downloaded-bytes snapshot for speed calculation in `progress()`.
+    last_polled_bytes: AtomicU64,
+    /// Previous poll timestamp for speed calculation in `progress()`.
+    last_polled_time: std::sync::Mutex<Instant>,
 }
 
 /// Handle returned by [`start_download`] that allows pausing, resuming, and
@@ -178,16 +182,46 @@ impl DownloadHandle {
                 .collect()
         };
 
+        // Compute speed from delta since last poll
+        let prev_bytes = self
+            .inner
+            .last_polled_bytes
+            .swap(total_downloaded, Ordering::Relaxed);
+        let now = Instant::now();
+        let elapsed = {
+            let mut guard = self.inner.last_polled_time.lock().unwrap();
+            let elapsed = now.duration_since(*guard);
+            *guard = now;
+            elapsed
+        };
+
+        let speed = if elapsed.as_secs_f64() > 0.05 {
+            total_downloaded.saturating_sub(prev_bytes) as f64 / elapsed.as_secs_f64()
+        } else {
+            0.0
+        };
+
+        let total_size_opt = if self.inner.total_size > 0 {
+            Some(self.inner.total_size)
+        } else {
+            None
+        };
+
+        let eta_seconds = if speed > 0.0 {
+            total_size_opt.map(|ts| {
+                let remaining = ts.saturating_sub(total_downloaded);
+                (remaining as f64 / speed) as u64
+            })
+        } else {
+            None
+        };
+
         DownloadProgress {
             download_id: download_id.to_string(),
             downloaded_size: total_downloaded,
-            total_size: if self.inner.total_size > 0 {
-                Some(self.inner.total_size)
-            } else {
-                None
-            },
-            speed: 0.0,
-            eta_seconds: None,
+            total_size: total_size_opt,
+            speed,
+            eta_seconds,
             connections,
         }
     }
@@ -261,6 +295,8 @@ where
         error_message: std::sync::Mutex::new(None),
         on_progress: Arc::new(on_progress),
         is_multi: AtomicBool::new(multi_eligible),
+        last_polled_bytes: AtomicU64::new(0),
+        last_polled_time: std::sync::Mutex::new(Instant::now()),
     });
 
     // Spawn initial download task
