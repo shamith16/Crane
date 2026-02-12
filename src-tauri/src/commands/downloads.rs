@@ -1,4 +1,5 @@
 use crane_core::metadata::analyzer;
+use crane_core::network::validate_url_safe;
 use crane_core::types::{Download, DownloadOptions, DownloadProgress, UrlAnalysis};
 use tauri::State;
 
@@ -6,6 +7,10 @@ use crate::state::AppState;
 
 #[tauri::command]
 pub async fn analyze_url(url: String) -> Result<UrlAnalysis, String> {
+    // Validate URL before making any HTTP requests (SSRF prevention)
+    let parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
+    validate_url_safe(&parsed).map_err(|e| e.to_string())?;
+
     analyzer::analyze_url(&url).await.map_err(|e| e.to_string())
 }
 
@@ -15,6 +20,10 @@ pub async fn add_download(
     url: String,
     options: Option<DownloadOptions>,
 ) -> Result<String, String> {
+    // Validate URL before processing (SSRF prevention)
+    let parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
+    validate_url_safe(&parsed).map_err(|e| e.to_string())?;
+
     let opts = options.unwrap_or_default();
     state
         .queue

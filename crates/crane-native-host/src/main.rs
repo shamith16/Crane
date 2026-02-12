@@ -85,6 +85,36 @@ fn categorize_mime(mime: Option<&str>) -> FileCategory {
     }
 }
 
+/// Cookie names that are considered sensitive and should not be persisted to the database.
+const SENSITIVE_COOKIE_NAMES: &[&str] = &[
+    "session", "sessionid", "session_id", "sid",
+    "token", "access_token", "refresh_token", "auth_token",
+    "jwt", "authorization", "auth",
+    "csrf", "csrftoken", "xsrf-token", "_csrf",
+    "connect.sid", "phpsessid", "jsessionid", "asp.net_sessionid",
+];
+
+/// Filter out sensitive cookies (session tokens, auth tokens) before database storage.
+/// Keeps only non-sensitive cookies like preferences (theme, language, etc.).
+fn filter_sensitive_cookies(cookies: &str) -> String {
+    cookies
+        .split(';')
+        .filter_map(|cookie| {
+            let trimmed = cookie.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let name = trimmed.split('=').next()?.trim().to_ascii_lowercase();
+            if SENSITIVE_COOKIE_NAMES.iter().any(|&s| name == s) {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 /// Handle a single incoming native message and produce a response.
 fn handle_message(msg: &serde_json::Value, db: &Database, save_dir: &str) -> serde_json::Value {
     let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
@@ -118,7 +148,7 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
         }
     };
 
-    // Parse URL to extract domain and derive filename
+    // Parse and validate URL (scheme + host safety)
     let parsed_url = match url::Url::parse(url_str) {
         Ok(u) => u,
         Err(e) => {
@@ -128,6 +158,17 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
             });
         }
     };
+
+    // Only allow http/https URLs
+    match parsed_url.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return serde_json::json!({
+                "type": "error",
+                "message": format!("Unsupported URL scheme: '{scheme}'. Only http and https are allowed.")
+            });
+        }
+    }
 
     let source_domain = parsed_url.host_str().map(|h| h.to_string());
 
@@ -162,7 +203,7 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
     let cookies = msg
         .get("cookies")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(|s| filter_sensitive_cookies(s));
 
     let category = categorize_mime(mime_type.as_deref());
 
@@ -444,5 +485,108 @@ mod tests {
             FileCategory::Archives
         );
         assert_eq!(categorize_mime(None), FileCategory::Other);
+    }
+
+    #[test]
+    fn test_handle_download_rejects_ftp() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "ftp://example.com/file.txt"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+        assert_eq!(response["type"], "error");
+        assert!(response["message"]
+            .as_str()
+            .unwrap()
+            .contains("Unsupported URL scheme"));
+    }
+
+    #[test]
+    fn test_handle_download_rejects_javascript() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "javascript:alert(1)"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+        assert_eq!(response["type"], "error");
+    }
+
+    #[test]
+    fn test_handle_download_rejects_file_scheme() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "file:///etc/passwd"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+        assert_eq!(response["type"], "error");
+        assert!(response["message"]
+            .as_str()
+            .unwrap()
+            .contains("Unsupported URL scheme"));
+    }
+
+    #[test]
+    fn test_filter_sensitive_cookies() {
+        // Keeps non-sensitive cookies
+        assert_eq!(
+            filter_sensitive_cookies("theme=dark; language=en"),
+            "theme=dark; language=en"
+        );
+
+        // Strips session cookies
+        assert_eq!(
+            filter_sensitive_cookies("theme=dark; session=abc123; language=en"),
+            "theme=dark; language=en"
+        );
+
+        // Strips auth tokens (case-insensitive)
+        assert_eq!(
+            filter_sensitive_cookies("token=xyz; theme=dark"),
+            "theme=dark"
+        );
+
+        // Strips JWT
+        assert_eq!(
+            filter_sensitive_cookies("jwt=eyJ...; preference=compact"),
+            "preference=compact"
+        );
+
+        // Strips multiple sensitive cookies
+        let result = filter_sensitive_cookies("sessionid=abc; csrf=def; theme=dark");
+        assert_eq!(result, "theme=dark");
+
+        // Empty input
+        assert_eq!(filter_sensitive_cookies(""), "");
+
+        // All cookies are sensitive
+        assert_eq!(filter_sensitive_cookies("session=abc; token=def"), "");
+    }
+
+    #[test]
+    fn test_handle_download_filters_cookies_in_db() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://example.com/file.zip",
+            "cookies": "session=secret123; theme=dark; token=abc"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+        assert_eq!(response["type"], "accepted");
+
+        let download_id = response["downloadId"].as_str().unwrap();
+        let dl = db.get_download(download_id).unwrap();
+
+        // Only non-sensitive cookies should be stored
+        let stored_cookies = dl.cookies.as_deref().unwrap();
+        assert!(!stored_cookies.contains("session"));
+        assert!(!stored_cookies.contains("token"));
+        assert!(stored_cookies.contains("theme=dark"));
     }
 }

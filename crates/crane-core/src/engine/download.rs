@@ -8,6 +8,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use crate::network::safe_redirect_policy;
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
 
 pub(crate) const PROGRESS_INTERVAL_MS: u64 = 250;
@@ -180,7 +181,7 @@ pub(crate) async fn download_file_with_token<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync,
 {
-    // Validate URL
+    // Validate URL scheme
     let parsed = Url::parse(url)?;
     match parsed.scheme() {
         "http" | "https" => {}
@@ -194,6 +195,7 @@ where
         .to_string();
     let client = reqwest::Client::builder()
         .user_agent(ua)
+        .redirect(safe_redirect_policy())
         .build()
         .map_err(CraneError::Network)?;
 

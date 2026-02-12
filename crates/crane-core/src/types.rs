@@ -249,6 +249,9 @@ pub enum CraneError {
     #[error("Path traversal rejected: {0}")]
     PathTraversal(String),
 
+    #[error("Request to private/internal network blocked: {0}")]
+    PrivateNetwork(String),
+
     #[error("Database error: {0}")]
     Database(String),
 }

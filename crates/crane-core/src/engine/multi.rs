@@ -13,6 +13,7 @@ use url::Url;
 
 use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
 use crate::metadata::analyzer::analyze_url;
+use crate::network::safe_redirect_policy;
 use crate::types::{
     ConnectionProgress, CraneError, DownloadOptions, DownloadProgress, DownloadResult,
 };
@@ -253,7 +254,7 @@ pub async fn start_download<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
 {
-    // Validate URL
+    // Validate URL scheme
     let parsed = Url::parse(url)?;
     match parsed.scheme() {
         "http" | "https" => {}
@@ -327,6 +328,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
         .to_string();
     let client = reqwest::Client::builder()
         .user_agent(ua)
+        .redirect(safe_redirect_policy())
         .build()
         .map_err(CraneError::Network)?;
 
@@ -900,7 +902,7 @@ pub async fn download<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
 {
-    // Validate URL
+    // Validate URL scheme
     let parsed = Url::parse(url)?;
     match parsed.scheme() {
         "http" | "https" => {}
@@ -946,6 +948,7 @@ where
         .to_string();
     let client = reqwest::Client::builder()
         .user_agent(ua)
+        .redirect(safe_redirect_policy())
         .build()
         .map_err(CraneError::Network)?;
 

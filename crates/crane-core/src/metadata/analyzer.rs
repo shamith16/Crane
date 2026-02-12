@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::metadata::mime::{categorize_extension, categorize_mime};
 use crate::metadata::sanitize_filename;
+use crate::network::safe_redirect_policy;
 use crate::types::{CraneError, FileCategory, UrlAnalysis};
 
 const USER_AGENT: &str = "Crane/0.1.0";
@@ -17,6 +18,7 @@ pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
+        .redirect(safe_redirect_policy())
         .build()
         .map_err(CraneError::Network)?;
 
