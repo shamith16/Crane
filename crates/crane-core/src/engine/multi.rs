@@ -2088,4 +2088,378 @@ mod tests {
         assert_eq!(result.downloaded_bytes, body.len() as u64);
         assert_eq!(std::fs::read(&save).unwrap(), body);
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Chaos / Adversarial Tests
+    // ═══════════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn chaos_range_ignored_causes_merge_mismatch() {
+        // HEAD advertises Accept-Ranges: bytes, but GET ignores Range header
+        // and returns the full body for every chunk. The merge should detect
+        // a size mismatch (each chunk wrote the full file) and return an error.
+        use super::super::chaos_responders::RangeIgnoringResponder;
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..1_048_576u32).map(|i| (i % 256) as u8).collect();
+
+        mount_head_with_ranges(&server, "/range-lie.bin", body.len() as u64).await;
+
+        Mock::given(method("GET"))
+            .and(path("/range-lie.bin"))
+            .respond_with(RangeIgnoringResponder { body: body.clone() })
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("range-lie.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/range-lie.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await;
+
+        // Should fail with merge size mismatch because each chunk got the
+        // full body instead of its assigned range
+        assert!(
+            result.is_err(),
+            "range-ignoring server should cause merge failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_one_chunk_fails_aborts_all() {
+        // 4-connection download where chunk 2's range returns 500 on all
+        // attempts. The entire download should fail and clean up.
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..1_048_576u32).map(|i| (i % 256) as u8).collect();
+
+        mount_head_with_ranges(&server, "/partial-fail.bin", body.len() as u64).await;
+
+        // Normal range responder for most requests
+        mount_get_range(&server, "/partial-fail.bin", &body).await;
+
+        // Override: requests with Range starting at chunk 2's offset → 500
+        // Chunk 2 for 1MB/4 = starts at 524288
+        // We can't easily override per-range in wiremock, so instead we use
+        // a responder that always returns 500.
+        // Actually, we need to replace the GET mock entirely with one that
+        // selectively fails chunk 2.
+
+        // Let's use a scoped approach: unregister the previous GET mock
+        // and use a custom responder.
+        server.reset().await;
+        mount_head_with_ranges(&server, "/partial-fail.bin", body.len() as u64).await;
+
+        struct SelectiveFailRangeResponder {
+            body: Vec<u8>,
+            fail_range_start: u64,
+        }
+
+        impl wiremock::Respond for SelectiveFailRangeResponder {
+            fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+                if let Some(range_header) = request.headers.get(&reqwest::header::RANGE) {
+                    let range_str = range_header.to_str().unwrap();
+                    let range = range_str.trim_start_matches("bytes=");
+                    let parts: Vec<&str> = range.split('-').collect();
+                    let start: u64 = parts[0].parse().unwrap();
+
+                    if start == self.fail_range_start {
+                        return wiremock::ResponseTemplate::new(500);
+                    }
+
+                    let start = start as usize;
+                    let end: usize = parts[1].parse().unwrap();
+                    let slice = &self.body[start..=end];
+                    wiremock::ResponseTemplate::new(206)
+                        .set_body_bytes(slice.to_vec())
+                        .insert_header("Content-Length", slice.len().to_string().as_str())
+                        .insert_header(
+                            "Content-Range",
+                            format!("bytes {start}-{end}/{}", self.body.len()).as_str(),
+                        )
+                } else {
+                    wiremock::ResponseTemplate::new(200)
+                        .set_body_bytes(self.body.clone())
+                        .insert_header("Content-Length", self.body.len().to_string().as_str())
+                }
+            }
+        }
+
+        // Chunk 1 starts at 262144 (second chunk in 4-way split of 1MB)
+        Mock::given(method("GET"))
+            .and(path("/partial-fail.bin"))
+            .respond_with(SelectiveFailRangeResponder {
+                body: body.clone(),
+                fail_range_start: 262_144,
+            })
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("partial-fail.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/partial-fail.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "download should fail when one chunk permanently fails"
+        );
+        assert!(
+            !save.exists(),
+            "final file should not exist after chunk failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_one_chunk_slow_others_fast() {
+        // One chunk is served with a 2-second delay, others are instant.
+        // All should eventually complete and merge correctly.
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..524_288u32).map(|i| (i % 251) as u8).collect(); // 512KB
+
+        mount_head_with_ranges(&server, "/mixed-speed.bin", body.len() as u64).await;
+
+        struct MixedSpeedRangeResponder {
+            body: Vec<u8>,
+            slow_range_start: u64,
+        }
+
+        impl wiremock::Respond for MixedSpeedRangeResponder {
+            fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+                if let Some(range_header) = request.headers.get(&reqwest::header::RANGE) {
+                    let range_str = range_header.to_str().unwrap();
+                    let range = range_str.trim_start_matches("bytes=");
+                    let parts: Vec<&str> = range.split('-').collect();
+                    let start: usize = parts[0].parse().unwrap();
+                    let end: usize = parts[1].parse().unwrap();
+                    let slice = &self.body[start..=end];
+
+                    let mut resp = wiremock::ResponseTemplate::new(206)
+                        .set_body_bytes(slice.to_vec())
+                        .insert_header("Content-Length", slice.len().to_string().as_str())
+                        .insert_header(
+                            "Content-Range",
+                            format!("bytes {start}-{end}/{}", self.body.len()).as_str(),
+                        );
+
+                    if start as u64 == self.slow_range_start {
+                        resp = resp.set_delay(std::time::Duration::from_secs(2));
+                    }
+
+                    resp
+                } else {
+                    wiremock::ResponseTemplate::new(200)
+                        .set_body_bytes(self.body.clone())
+                        .insert_header("Content-Length", self.body.len().to_string().as_str())
+                }
+            }
+        }
+
+        Mock::given(method("GET"))
+            .and(path("/mixed-speed.bin"))
+            .respond_with(MixedSpeedRangeResponder {
+                body: body.clone(),
+                slow_range_start: 0, // First chunk is slow
+            })
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("mixed-speed.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(2),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/mixed-speed.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    #[tokio::test]
+    async fn chaos_content_size_changed_on_resume() {
+        // Start a download, pause it, then on resume the HEAD reports
+        // a different Content-Length. Should error with "server file size changed".
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..1_048_576u32).map(|i| (i % 256) as u8).collect();
+
+        mount_head_with_ranges(&server, "/morphing.bin", body.len() as u64).await;
+
+        // GET: serve with 2s delay so we can pause mid-flight
+        Mock::given(method("GET"))
+            .and(path("/morphing.bin"))
+            .respond_with(
+                RangeResponder { body: body.clone() }
+            )
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("morphing.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            ..Default::default()
+        };
+
+        let handle = start_download(
+            &format!("{}/morphing.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        // Pause after a brief delay
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        handle.pause().await;
+
+        // Now change the HEAD response to report a different file size
+        server.reset().await;
+        mount_head_with_ranges(&server, "/morphing.bin", body.len() as u64 + 1000).await;
+        mount_get_range(&server, "/morphing.bin", &body).await;
+
+        // Resume should fail because the HEAD size changed
+        let resume_result = handle.resume().await;
+        assert!(
+            resume_result.is_err(),
+            "resume should fail when server file size changes"
+        );
+        let err_msg = format!("{}", resume_result.unwrap_err());
+        assert!(
+            err_msg.contains("file size changed"),
+            "error should mention file size change, got: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_chunk_file_truncated_on_disk_during_resume() {
+        // Download a file with multi-connection, pause, manually truncate
+        // a chunk file, then resume. The resume should re-download from
+        // the truncated offset and produce a correct final file.
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..524_288u32).map(|i| (i % 251) as u8).collect(); // 512KB
+
+        mount_head_with_ranges(&server, "/trunc-chunk.bin", body.len() as u64).await;
+
+        Mock::given(method("GET"))
+            .and(path("/trunc-chunk.bin"))
+            .respond_with(RangeResponder { body: body.clone() })
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("trunc-chunk.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(2),
+            ..Default::default()
+        };
+
+        let handle = start_download(
+            &format!("{}/trunc-chunk.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        // Wait for download to mostly complete, then pause
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        handle.pause().await;
+
+        // Truncate chunk_0 to simulate disk corruption
+        let temp_dir = temp_dir_path(&save);
+        let chunk_0_path = temp_dir.join("chunk_0");
+        if chunk_0_path.exists() {
+            let meta = std::fs::metadata(&chunk_0_path).unwrap();
+            let truncated_len = meta.len() / 2; // Cut in half
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&chunk_0_path)
+                .unwrap();
+            file.set_len(truncated_len).unwrap();
+        }
+
+        // Resume — should re-download from truncated offset
+        handle.resume().await.unwrap();
+        let result = handle.wait().await.unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    #[tokio::test]
+    async fn chaos_intermittent_chunk_failures_with_retry() {
+        // Multi-connection download where the GET responder fails the
+        // first request then succeeds on retry. All chunks should
+        // eventually complete and merge correctly.
+        use super::super::chaos_responders::IntermittentRangeResponder;
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..524_288u32).map(|i| (i % 251) as u8).collect(); // 512KB
+
+        mount_head_with_ranges(&server, "/retry-chunks.bin", body.len() as u64).await;
+
+        Mock::given(method("GET"))
+            .and(path("/retry-chunks.bin"))
+            .respond_with(IntermittentRangeResponder::new(body.clone(), 1))
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("retry-chunks.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(2),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/retry-chunks.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
 }

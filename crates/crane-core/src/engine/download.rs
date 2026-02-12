@@ -798,4 +798,257 @@ mod tests {
 
         assert_eq!(result.downloaded_bytes, body.len() as u64);
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Chaos / Adversarial Tests
+    // ═══════════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn chaos_truncated_response_fails() {
+        // Server advertises Content-Length: 10000 but only sends 5000 bytes.
+        // The download should fail with a network error (connection closed
+        // prematurely) and no final file should be left behind.
+        use super::super::chaos_responders::TruncatingResponder;
+
+        let server = MockServer::start().await;
+        let body = vec![0xABu8; 10_000];
+
+        Mock::given(method("GET"))
+            .and(path("/truncated.bin"))
+            .respond_with(TruncatingResponder {
+                body: body.clone(),
+                truncate_after: 5_000,
+            })
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("truncated.bin");
+
+        let result = download_file(
+            &format!("{}/truncated.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await;
+
+        // Should fail because the stream ends before Content-Length is reached
+        // (reqwest detects the mismatch and returns an error), OR the download
+        // succeeds but with fewer bytes. Either way, the final file at `save`
+        // should not contain the full expected data.
+        match result {
+            Err(_) => {
+                // Expected: network error due to truncation
+                assert!(
+                    !save.exists(),
+                    "final file should be cleaned up after failure"
+                );
+            }
+            Ok(r) => {
+                // Some HTTP clients may silently accept the truncated body.
+                // In this case, verify we got fewer bytes than expected.
+                assert!(
+                    r.downloaded_bytes < body.len() as u64,
+                    "truncated response should yield fewer bytes than Content-Length"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn chaos_slow_trickle_completes() {
+        // Server responds very slowly (1.5s delay). Verifies that the
+        // download engine is patient enough and doesn't prematurely timeout.
+        use super::super::chaos_responders::SlowTrickleResponder;
+
+        let server = MockServer::start().await;
+        let body = b"slow but steady wins the race";
+
+        Mock::given(method("GET"))
+            .and(path("/slow.bin"))
+            .respond_with(SlowTrickleResponder {
+                body: body.to_vec(),
+                delay: std::time::Duration::from_millis(1500),
+            })
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("slow.bin");
+
+        let result = download_file(
+            &format!("{}/slow.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    #[tokio::test]
+    async fn chaos_intermittent_500_retries_succeed() {
+        // Server fails on call 1 (500), succeeds on call 2 (200).
+        // Retry logic should recover and produce a valid download.
+        use super::super::chaos_responders::FailThenSucceedResponder;
+
+        let server = MockServer::start().await;
+        let body = b"recovery after chaos";
+
+        Mock::given(method("GET"))
+            .and(path("/intermittent.bin"))
+            .respond_with(FailThenSucceedResponder::new(body.to_vec(), 1))
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("intermittent.bin");
+
+        let result = download_file(
+            &format!("{}/intermittent.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    #[tokio::test]
+    async fn chaos_all_retries_exhausted_cleans_up() {
+        // Server returns 500 on ALL requests (initial + 3 retries = 4 total).
+        // Verifies the temp `.cranedownload` file is removed after failure.
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/always-chaos.bin"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(4)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("always-chaos.bin");
+
+        let err = download_file(
+            &format!("{}/always-chaos.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await;
+
+        assert!(err.is_err(), "should fail after all retries exhausted");
+        assert!(!save.exists(), "final file should not exist");
+
+        // Verify temp file is also cleaned up
+        let mut temp_name = save.as_os_str().to_os_string();
+        temp_name.push(".cranedownload");
+        let temp_path = std::path::PathBuf::from(temp_name);
+        assert!(
+            !temp_path.exists(),
+            "temp file should be cleaned up after retry exhaustion"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_redirect_to_private_ip_blocked() {
+        // Server A redirects (302) to Server B (127.0.0.1).
+        // Crane's SSRF protection should BLOCK the redirect since the
+        // target is a loopback address. This test validates the security
+        // property: redirects to private/internal hosts are rejected.
+
+        let server_b = MockServer::start().await;
+        let body = b"private content";
+
+        Mock::given(method("GET"))
+            .and(path("/actual.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.to_vec())
+                    .insert_header("Content-Length", body.len().to_string().as_str()),
+            )
+            .mount(&server_b)
+            .await;
+
+        let server_a = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/redirect.bin"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("Location", format!("{}/actual.bin", server_b.uri())),
+            )
+            .mount(&server_a)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("redirect.bin");
+
+        let result = download_file(
+            &format!("{}/redirect.bin", server_a.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await;
+
+        // Should fail because the redirect target (127.0.0.1) is a private IP
+        assert!(
+            result.is_err(),
+            "redirect to private/loopback IP should be blocked"
+        );
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("private") || err_msg.contains("internal") || err_msg.contains("redirect"),
+            "error should mention private/internal host, got: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn chaos_garbage_html_body_captive_portal() {
+        // Server returns 200 OK but with HTML (captive portal) instead
+        // of the expected binary. Crane currently downloads whatever the
+        // server sends, so this test documents the behavior — the file
+        // will contain the HTML garbage. A future MIME-check guard could
+        // reject this.
+        use super::super::chaos_responders::GarbagePayloadResponder;
+
+        let server = MockServer::start().await;
+        let garbage = GarbagePayloadResponder::default();
+        let expected_len = garbage.html_body.len() as u64;
+
+        Mock::given(method("GET"))
+            .and(path("/portal.bin"))
+            .respond_with(garbage)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("portal.bin");
+
+        let result = download_file(
+            &format!("{}/portal.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        // Crane currently accepts whatever the server sends
+        assert_eq!(result.downloaded_bytes, expected_len);
+        let content = std::fs::read_to_string(&save).unwrap();
+        assert!(
+            content.contains("WiFi Login Required"),
+            "downloaded file should contain the garbage HTML"
+        );
+    }
 }
