@@ -21,6 +21,7 @@ toml = "0.8"
 sha2 = "0.10"
 md-5 = "0.10"
 dirs = "6"
+crc32fast = "1"
 
 [dev-dependencies]
 wiremock = "0.6"

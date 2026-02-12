@@ -72,6 +72,19 @@ where
         });
     }
 
+    // Validate Content-Type against expected filename (captive portal guard)
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let filename = save_path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    crate::metadata::validate_content_type(content_type.as_deref(), filename)?;
+
     let total_size = response.content_length();
 
     // Ensure parent directory exists
@@ -228,17 +241,35 @@ where
                 // Rename temp file to final path
                 tokio::fs::rename(&tmp, save_path).await?;
 
+                // Hash verification (if expected hash was provided)
+                let hash_verified = if let Some(ref expected) = options.expected_hash {
+                    let actual =
+                        crate::hash::compute_hash(save_path, expected.algorithm).await?;
+                    if actual != expected.value {
+                        let _ = tokio::fs::remove_file(save_path).await;
+                        return Err(CraneError::HashMismatch {
+                            expected: expected.value.clone(),
+                            actual,
+                        });
+                    }
+                    Some(true)
+                } else {
+                    None
+                };
+
                 return Ok(DownloadResult {
                     downloaded_bytes,
                     elapsed_ms: start.elapsed().as_millis() as u64,
                     final_path: save_path.to_path_buf(),
+                    hash_verified,
                 });
             }
             Err(e) => {
-                // Don't retry 4xx errors or URL-level errors — they're permanent
+                // Don't retry 4xx errors, Content-Type mismatches, or URL-level errors — they're permanent
                 let is_retryable = match &e {
                     CraneError::Http { status, .. } => *status >= 500,
                     CraneError::Network(_) => true,
+                    CraneError::ContentTypeMismatch { .. } => false,
                     _ => false,
                 };
                 if !is_retryable || attempt == MAX_RETRIES {
@@ -1015,15 +1046,12 @@ mod tests {
     #[tokio::test]
     async fn chaos_garbage_html_body_captive_portal() {
         // Server returns 200 OK but with HTML (captive portal) instead
-        // of the expected binary. Crane currently downloads whatever the
-        // server sends, so this test documents the behavior — the file
-        // will contain the HTML garbage. A future MIME-check guard could
-        // reject this.
+        // of the expected binary. The MIME guard now detects this and
+        // rejects the download with a ContentTypeMismatch error.
         use super::super::chaos_responders::GarbagePayloadResponder;
 
         let server = MockServer::start().await;
         let garbage = GarbagePayloadResponder::default();
-        let expected_len = garbage.html_body.len() as u64;
 
         Mock::given(method("GET"))
             .and(path("/portal.bin"))
@@ -1034,8 +1062,173 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let save = tmp.path().join("portal.bin");
 
-        let result = download_file(
+        let err = download_file(
             &format!("{}/portal.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await
+        .unwrap_err();
+
+        // Should fail because text/html was served for a .bin file
+        assert!(
+            matches!(err, CraneError::ContentTypeMismatch { .. }),
+            "expected ContentTypeMismatch, got: {err:?}"
+        );
+        assert!(!save.exists(), "file should not be saved for captive portal");
+    }
+
+    #[tokio::test]
+    async fn test_captive_portal_detected() {
+        let server = MockServer::start().await;
+        let html_body = b"<html><body>Please log in to WiFi</body></html>";
+
+        Mock::given(method("GET"))
+            .and(path("/installer.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(html_body.to_vec())
+                    .insert_header("Content-Type", "text/html")
+                    .insert_header("Content-Length", html_body.len().to_string().as_str()),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("installer.bin");
+
+        let err = download_file(
+            &format!("{}/installer.bin", server.uri()),
+            &save,
+            &DownloadOptions::default(),
+            noop_progress,
+        )
+        .await
+        .unwrap_err();
+
+        match err {
+            CraneError::ContentTypeMismatch { expected, actual } => {
+                assert!(expected.contains(".bin"));
+                assert_eq!(actual, "text/html");
+            }
+            other => panic!("expected ContentTypeMismatch, got: {other:?}"),
+        }
+        assert!(!save.exists());
+    }
+
+    #[tokio::test]
+    async fn test_hash_verification_sha256_success() {
+        use crate::hash::HashAlgorithm;
+        use crate::types::ExpectedHash;
+        use sha2::{Digest, Sha256};
+
+        let server = MockServer::start().await;
+        let body = b"hash verification test body";
+        let expected_hash = format!("{:x}", Sha256::digest(body));
+
+        Mock::given(method("GET"))
+            .and(path("/hash_ok.txt"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.to_vec())
+                    .insert_header("Content-Length", body.len().to_string().as_str()),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("hash_ok.txt");
+
+        let opts = DownloadOptions {
+            expected_hash: Some(ExpectedHash {
+                algorithm: HashAlgorithm::Sha256,
+                value: expected_hash,
+            }),
+            ..Default::default()
+        };
+
+        let result = download_file(
+            &format!("{}/hash_ok.txt", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.hash_verified, Some(true));
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert!(save.exists());
+    }
+
+    #[tokio::test]
+    async fn test_hash_verification_sha256_mismatch() {
+        use crate::hash::HashAlgorithm;
+        use crate::types::ExpectedHash;
+
+        let server = MockServer::start().await;
+        let body = b"hash mismatch test body";
+
+        Mock::given(method("GET"))
+            .and(path("/hash_bad.txt"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.to_vec())
+                    .insert_header("Content-Length", body.len().to_string().as_str()),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("hash_bad.txt");
+
+        let opts = DownloadOptions {
+            expected_hash: Some(ExpectedHash {
+                algorithm: HashAlgorithm::Sha256,
+                value: "0000000000000000000000000000000000000000000000000000000000000000"
+                    .to_string(),
+            }),
+            ..Default::default()
+        };
+
+        let err = download_file(
+            &format!("{}/hash_bad.txt", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, CraneError::HashMismatch { .. }));
+        assert!(!save.exists(), "file should be deleted after hash mismatch");
+    }
+
+    #[tokio::test]
+    async fn test_hash_verification_none() {
+        let server = MockServer::start().await;
+        let body = b"no hash check";
+
+        Mock::given(method("GET"))
+            .and(path("/no_hash.txt"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.to_vec())
+                    .insert_header("Content-Length", body.len().to_string().as_str()),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("no_hash.txt");
+
+        let result = download_file(
+            &format!("{}/no_hash.txt", server.uri()),
             &save,
             &DownloadOptions::default(),
             noop_progress,
@@ -1043,12 +1236,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Crane currently accepts whatever the server sends
-        assert_eq!(result.downloaded_bytes, expected_len);
-        let content = std::fs::read_to_string(&save).unwrap();
-        assert!(
-            content.contains("WiFi Login Required"),
-            "downloaded file should contain the garbage HTML"
-        );
+        assert_eq!(result.hash_verified, None);
+        assert!(save.exists());
     }
 }

@@ -11,6 +11,8 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use crc32fast::Hasher as Crc32Hasher;
+
 use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
 use crate::metadata::analyzer::analyze_url;
 use crate::network::safe_redirect_policy;
@@ -337,7 +339,18 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
     for (i, chunk) in ctrl.chunks.iter().enumerate() {
         let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
         let existing_bytes = match tokio::fs::metadata(&chunk_path).await {
-            Ok(meta) => meta.len(),
+            Ok(meta) => {
+                let len = meta.len();
+                if len > 0 && !verify_chunk_checksum(&chunk_path).await {
+                    // Chunk corrupted — delete and re-download from scratch
+                    let _ = tokio::fs::remove_file(&chunk_path).await;
+                    let sidecar = chunk_path.with_extension("crc32");
+                    let _ = tokio::fs::remove_file(&sidecar).await;
+                    0
+                } else {
+                    len
+                }
+            }
             Err(_) => 0,
         };
         let chunk_total = chunk.range_end - chunk.range_start + 1;
@@ -432,6 +445,12 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
         let options = ctrl.options.clone();
         let counter = Arc::clone(&ctrl.counters[i]);
         let token = cancel_token.child_token();
+        let fname = ctrl
+            .save_path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string();
 
         join_set.spawn(async move {
             download_chunk_resume(
@@ -444,6 +463,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
                 token,
                 chunk.connection_num,
                 already,
+                &fname,
             )
             .await
         });
@@ -485,6 +505,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
             downloaded_bytes: 0,
             elapsed_ms: start_time.elapsed().as_millis() as u64,
             final_path: ctrl.save_path.clone(),
+            hash_verified: None,
         });
     }
 
@@ -541,6 +562,23 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
     // Cleanup temp directory
     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
 
+    // Hash verification (if expected hash was provided)
+    let hash_verified = if let Some(ref expected) = ctrl.options.expected_hash {
+        let actual =
+            crate::hash::compute_hash(&ctrl.save_path, expected.algorithm).await?;
+        if actual != expected.value {
+            let _ = tokio::fs::remove_file(&ctrl.save_path).await;
+            ctrl.finished.store(true, Ordering::SeqCst);
+            return Err(CraneError::HashMismatch {
+                expected: expected.value.clone(),
+                actual,
+            });
+        }
+        Some(true)
+    } else {
+        None
+    };
+
     // Final progress callback
     let elapsed = start_time.elapsed();
     let speed = if elapsed.as_secs_f64() > 0.0 {
@@ -572,6 +610,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
         downloaded_bytes: merged_bytes,
         elapsed_ms: elapsed.as_millis() as u64,
         final_path: ctrl.save_path.clone(),
+        hash_verified,
     })
 }
 
@@ -587,6 +626,7 @@ async fn download_chunk_resume(
     cancel_token: CancellationToken,
     original_conn_num: u32,
     already_downloaded: u64,
+    expected_filename: &str,
 ) -> Result<u64, CraneError> {
     let chunk_path = temp_dir.join(format!("chunk_{original_conn_num}"));
     let mut last_error: Option<CraneError> = None;
@@ -646,6 +686,14 @@ async fn download_chunk_resume(
             });
         }
 
+        // Validate Content-Type against expected filename (captive portal guard)
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        crate::metadata::validate_content_type(content_type.as_deref(), expected_filename)?;
+
         // Open file in append mode
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
@@ -690,6 +738,7 @@ async fn download_chunk_resume(
             continue;
         }
 
+        write_chunk_checksum(&chunk_path).await?;
         return Ok(downloaded);
     }
 
@@ -697,6 +746,41 @@ async fn download_chunk_resume(
         status: 0,
         message: "unknown error".to_string(),
     }))
+}
+
+/// Write a CRC32 checksum sidecar for a chunk file.
+async fn write_chunk_checksum(chunk_path: &Path) -> Result<(), CraneError> {
+    let data = tokio::fs::read(chunk_path).await?;
+    let mut hasher = Crc32Hasher::new();
+    hasher.update(&data);
+    let checksum = hasher.finalize();
+    let sidecar_path = chunk_path.with_extension("crc32");
+    tokio::fs::write(&sidecar_path, checksum.to_le_bytes()).await?;
+    Ok(())
+}
+
+/// Verify a chunk file against its CRC32 sidecar. Returns true if valid,
+/// false if the sidecar is missing or the checksum doesn't match.
+async fn verify_chunk_checksum(chunk_path: &Path) -> bool {
+    let sidecar_path = chunk_path.with_extension("crc32");
+    let expected_bytes = match tokio::fs::read(&sidecar_path).await {
+        Ok(b) if b.len() == 4 => b,
+        _ => return false,
+    };
+    let expected = u32::from_le_bytes([
+        expected_bytes[0],
+        expected_bytes[1],
+        expected_bytes[2],
+        expected_bytes[3],
+    ]);
+
+    let data = match tokio::fs::read(chunk_path).await {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    let mut hasher = Crc32Hasher::new();
+    hasher.update(&data);
+    hasher.finalize() == expected
 }
 
 /// Run a single-connection download using the controller's callback.
@@ -722,6 +806,7 @@ async fn run_single_download(ctrl: &DownloadController) -> Result<DownloadResult
             downloaded_bytes: 0,
             elapsed_ms: 0,
             final_path: ctrl.save_path.clone(),
+            hash_verified: None,
         });
     }
 
@@ -789,6 +874,7 @@ async fn download_chunk(
     options: &DownloadOptions,
     counter: Arc<AtomicU64>,
     cancel_token: CancellationToken,
+    expected_filename: &str,
 ) -> Result<u64, CraneError> {
     let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
     let mut last_error: Option<CraneError> = None;
@@ -841,6 +927,14 @@ async fn download_chunk(
             });
         }
 
+        // Validate Content-Type against expected filename (captive portal guard)
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        crate::metadata::validate_content_type(content_type.as_deref(), expected_filename)?;
+
         let mut file = tokio::fs::File::create(&chunk_path).await?;
         let mut stream = response.bytes_stream();
         let mut downloaded: u64 = 0;
@@ -878,6 +972,9 @@ async fn download_chunk(
             last_error = Some(err);
             continue;
         }
+
+        // Write CRC32 checksum sidecar for chunk integrity on resume
+        write_chunk_checksum(&chunk_path).await?;
 
         return Ok(downloaded);
     }
@@ -1037,9 +1134,17 @@ where
         let options = options.clone();
         let counter = Arc::clone(&counters[i]);
         let token = cancel_token.child_token();
+        let fname = save_path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string();
 
         join_set.spawn(async move {
-            download_chunk(&client, &url, &chunk, &temp_dir, &options, counter, token).await
+            download_chunk(
+                &client, &url, &chunk, &temp_dir, &options, counter, token, &fname,
+            )
+            .await
         });
     }
 
@@ -1110,6 +1215,22 @@ where
     // Cleanup temp directory
     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
 
+    // Hash verification (if expected hash was provided)
+    let hash_verified = if let Some(ref expected) = options.expected_hash {
+        let actual =
+            crate::hash::compute_hash(save_path, expected.algorithm).await?;
+        if actual != expected.value {
+            let _ = tokio::fs::remove_file(save_path).await;
+            return Err(CraneError::HashMismatch {
+                expected: expected.value.clone(),
+                actual,
+            });
+        }
+        Some(true)
+    } else {
+        None
+    };
+
     // Final progress callback
     let elapsed = start_time.elapsed();
     let speed = if elapsed.as_secs_f64() > 0.0 {
@@ -1139,6 +1260,7 @@ where
         downloaded_bytes: merged_bytes,
         elapsed_ms: elapsed.as_millis() as u64,
         final_path: save_path.to_path_buf(),
+        hash_verified,
     })
 }
 
@@ -2461,5 +2583,194 @@ mod tests {
 
         assert_eq!(result.downloaded_bytes, body.len() as u64);
         assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    // ── Test: Multi-connection hash verification success ──
+
+    #[tokio::test]
+    async fn test_multi_hash_verification_success() {
+        use crate::hash::HashAlgorithm;
+        use crate::types::ExpectedHash;
+        use sha2::{Digest, Sha256};
+
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..1_048_576u32).map(|i| (i % 256) as u8).collect();
+        let expected_hash = format!("{:x}", Sha256::digest(&body));
+
+        mount_head_with_ranges(&server, "/hash_multi.bin", body.len() as u64).await;
+        mount_get_range(&server, "/hash_multi.bin", &body).await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("hash_multi.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            expected_hash: Some(ExpectedHash {
+                algorithm: HashAlgorithm::Sha256,
+                value: expected_hash,
+            }),
+            ..Default::default()
+        };
+
+        let result = download(
+            &format!("{}/hash_multi.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.hash_verified, Some(true));
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+    }
+
+    // ── Test: Chunk checksum write and verify ──
+
+    #[tokio::test]
+    async fn test_chunk_checksum_write_and_verify() {
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..1_048_576u32).map(|i| (i % 251) as u8).collect();
+
+        mount_head_with_ranges(&server, "/crc_verify.bin", body.len() as u64).await;
+        mount_get_range(&server, "/crc_verify.bin", &body).await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("crc_verify.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            ..Default::default()
+        };
+
+        let handle = start_download(
+            &format!("{}/crc_verify.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        // Let the download start and then pause to inspect chunk files
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        handle.pause().await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let temp_dir = temp_dir_path(&save);
+
+        // Check that at least some chunk files have CRC32 sidecars
+        for i in 0..4u32 {
+            let chunk_path = temp_dir.join(format!("chunk_{i}"));
+            let sidecar_path = temp_dir.join(format!("chunk_{i}.crc32"));
+            if sidecar_path.exists() {
+                let sidecar_data = std::fs::read(&sidecar_path).unwrap();
+                assert_eq!(sidecar_data.len(), 4, "CRC32 sidecar should be 4 bytes");
+                assert!(
+                    verify_chunk_checksum(&chunk_path).await,
+                    "chunk_{i} should pass checksum verification"
+                );
+            }
+        }
+
+        // Resume and complete the download
+        handle.resume().await.unwrap();
+        let result = handle.wait().await.unwrap();
+        assert_eq!(result.downloaded_bytes, body.len() as u64);
+        assert_eq!(std::fs::read(&save).unwrap(), body);
+
+        assert!(
+            !temp_dir.exists(),
+            "temp dir should be cleaned up after successful download"
+        );
+    }
+
+    // ── Test: Chunk checksum corruption detected on resume ──
+
+    #[tokio::test]
+    async fn test_chunk_checksum_corruption_detected() {
+        let server = MockServer::start().await;
+        let body: Vec<u8> = (0..1_048_576u32).map(|i| (i % 251) as u8).collect();
+        let total_size = body.len() as u64;
+
+        mount_head_with_ranges(&server, "/crc_corrupt.bin", total_size).await;
+        mount_get_range_slow(
+            &server,
+            "/crc_corrupt.bin",
+            &body,
+            std::time::Duration::from_secs(10),
+        )
+        .await;
+
+        let tmp = TempDir::new().unwrap();
+        let save = tmp.path().join("crc_corrupt.bin");
+
+        let opts = DownloadOptions {
+            connections: Some(4),
+            ..Default::default()
+        };
+
+        let handle = start_download(
+            &format!("{}/crc_corrupt.bin", server.uri()),
+            &save,
+            &opts,
+            noop_progress,
+        )
+        .await
+        .unwrap();
+
+        // The slow responder delays 10s so chunks won't complete — pause immediately
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        handle.pause().await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let temp_dir = temp_dir_path(&save);
+        assert!(temp_dir.exists(), "temp dir should exist after pause");
+
+        // Manually write all 4 chunk files with valid data and CRC32 sidecars
+        let chunks = plan_chunks(total_size, 4);
+        for chunk in &chunks {
+            let chunk_data =
+                &body[chunk.range_start as usize..=chunk.range_end as usize];
+            let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
+            std::fs::write(&chunk_path, chunk_data).unwrap();
+            write_chunk_checksum(&chunk_path).await.unwrap();
+        }
+
+        // Now corrupt chunk_0: flip bytes but keep same length
+        let chunk0_path = temp_dir.join("chunk_0");
+        let mut data = std::fs::read(&chunk0_path).unwrap();
+        for j in 0..std::cmp::min(10, data.len()) {
+            data[j] = data[j].wrapping_add(1);
+        }
+        std::fs::write(&chunk0_path, &data).unwrap();
+
+        // Verify chunk_0 now fails checksum and chunk_1 still passes
+        assert!(
+            !verify_chunk_checksum(&chunk0_path).await,
+            "corrupted chunk should fail verification"
+        );
+        let chunk1_path = temp_dir.join("chunk_1");
+        assert!(
+            verify_chunk_checksum(&chunk1_path).await,
+            "uncorrupted chunk should pass verification"
+        );
+
+        // Reset server to fast responder for resume
+        server.reset().await;
+        mount_head_with_ranges(&server, "/crc_corrupt.bin", total_size).await;
+        mount_get_range(&server, "/crc_corrupt.bin", &body).await;
+
+        // Resume — the corrupted chunk should be detected and re-downloaded
+        handle.resume().await.unwrap();
+        let result = handle.wait().await.unwrap();
+
+        assert_eq!(result.downloaded_bytes, total_size);
+        assert_eq!(
+            std::fs::read(&save).unwrap(),
+            body,
+            "final file should match original body after re-downloading corrupted chunk"
+        );
     }
 }

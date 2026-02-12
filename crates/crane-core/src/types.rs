@@ -189,6 +189,12 @@ pub struct ConnectionProgress {
     pub range_end: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpectedHash {
+    pub algorithm: crate::hash::HashAlgorithm,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DownloadOptions {
     pub save_path: Option<String>,
@@ -199,6 +205,7 @@ pub struct DownloadOptions {
     pub cookies: Option<String>,
     pub user_agent: Option<String>,
     pub headers: Option<std::collections::HashMap<String, String>>,
+    pub expected_hash: Option<ExpectedHash>,
 }
 
 /// Result returned after a successful download
@@ -207,6 +214,7 @@ pub struct DownloadResult {
     pub downloaded_bytes: u64,
     pub elapsed_ms: u64,
     pub final_path: std::path::PathBuf,
+    pub hash_verified: Option<bool>,
 }
 
 // ─── Error Types ────────────────────────────────────
@@ -240,11 +248,17 @@ pub enum CraneError {
     #[error("Hash mismatch: expected {expected}, got {actual}")]
     HashMismatch { expected: String, actual: String },
 
+    #[error("Content-Type mismatch: expected {expected}, got {actual}")]
+    ContentTypeMismatch { expected: String, actual: String },
+
     #[error("Unsupported URL scheme: {0}")]
     UnsupportedScheme(String),
 
     #[error("Duplicate URL: {0}")]
     DuplicateUrl(String),
+
+    #[error("Queue full: maximum {max} downloads allowed")]
+    QueueFull { max: u32 },
 
     #[error("Path traversal rejected: {0}")]
     PathTraversal(String),

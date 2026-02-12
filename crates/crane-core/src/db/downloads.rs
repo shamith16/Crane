@@ -388,6 +388,20 @@ impl Database {
         Ok(count as u32)
     }
 
+    /// Count downloads that are NOT in a terminal state (completed or failed).
+    /// This includes: pending, analyzing, downloading, paused, queued.
+    pub fn count_non_terminal_downloads(&self) -> Result<u32, CraneError> {
+        let count: i64 = self
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM downloads WHERE status NOT IN ('completed', 'failed')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| CraneError::Database(e.to_string()))?;
+        Ok(count as u32)
+    }
+
     /// Delete all completed downloads. Returns number of deleted rows.
     pub fn delete_completed_downloads(&self) -> Result<u64, CraneError> {
         let count = self
@@ -699,6 +713,35 @@ mod tests {
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CraneError::Database(_)));
+    }
+
+    #[test]
+    fn test_count_non_terminal_downloads() {
+        let db = Database::open_in_memory().unwrap();
+
+        // Empty DB
+        assert_eq!(db.count_non_terminal_downloads().unwrap(), 0);
+
+        // Insert various statuses
+        let dl1 = make_test_download("nt-1", DownloadStatus::Pending);
+        let dl2 = make_test_download("nt-2", DownloadStatus::Downloading);
+        let dl3 = make_test_download("nt-3", DownloadStatus::Completed);
+        let dl4 = make_test_download("nt-4", DownloadStatus::Failed);
+        let dl5 = make_test_download("nt-5", DownloadStatus::Paused);
+        let dl6 = make_test_download("nt-6", DownloadStatus::Queued);
+        let dl7 = make_test_download("nt-7", DownloadStatus::Analyzing);
+
+        db.insert_download(&dl1).unwrap();
+        db.insert_download(&dl2).unwrap();
+        db.insert_download(&dl3).unwrap();
+        db.insert_download(&dl4).unwrap();
+        db.insert_download(&dl5).unwrap();
+        db.insert_download(&dl6).unwrap();
+        db.insert_download(&dl7).unwrap();
+
+        // Should count: pending, downloading, paused, queued, analyzing = 5
+        // Should NOT count: completed, failed = 2
+        assert_eq!(db.count_non_terminal_downloads().unwrap(), 5);
     }
 
     #[test]

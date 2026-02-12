@@ -8,6 +8,41 @@ use std::path::Path;
 /// Strips directory components, rejects traversal sequences (`..`),
 /// removes leading dots (hidden files), and replaces path separators.
 /// Returns `"download"` if the result would be empty.
+/// Check if the server's Content-Type is suspiciously different from what we expect.
+/// Returns Err if the response looks like a captive portal or error page.
+pub fn validate_content_type(
+    response_content_type: Option<&str>,
+    expected_filename: &str,
+) -> Result<(), crate::types::CraneError> {
+    let response_ct = match response_content_type {
+        Some(ct) => ct.to_ascii_lowercase(),
+        None => return Ok(()), // No Content-Type header = can't validate
+    };
+
+    // Extract the base MIME type (before ;charset=... etc)
+    let response_mime = response_ct.split(';').next().unwrap_or("").trim();
+
+    // If the server returned text/html but the expected file is NOT .html/.htm,
+    // this is almost certainly a captive portal or error page.
+    if response_mime == "text/html" {
+        let ext = std::path::Path::new(expected_filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+
+        match ext.as_str() {
+            "html" | "htm" | "xhtml" | "mhtml" => Ok(()),
+            _ => Err(crate::types::CraneError::ContentTypeMismatch {
+                expected: format!("binary or matching type for .{ext}"),
+                actual: response_mime.to_string(),
+            }),
+        }
+    } else {
+        Ok(())
+    }
+}
+
 pub fn sanitize_filename(name: &str) -> String {
     // First, try to extract just the file_name component.
     // Path::file_name() returns None for "..", ".", or empty strings,
@@ -36,6 +71,54 @@ pub fn sanitize_filename(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_validate_content_type_html_for_zip() {
+        let result = validate_content_type(Some("text/html"), "archive.zip");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            crate::types::CraneError::ContentTypeMismatch { expected, actual } => {
+                assert!(expected.contains(".zip"));
+                assert_eq!(actual, "text/html");
+            }
+            other => panic!("expected ContentTypeMismatch, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_validate_content_type_html_for_html() {
+        assert!(validate_content_type(Some("text/html"), "page.html").is_ok());
+    }
+
+    #[test]
+    fn test_validate_content_type_binary_for_zip() {
+        assert!(validate_content_type(Some("application/octet-stream"), "archive.zip").is_ok());
+    }
+
+    #[test]
+    fn test_validate_content_type_none() {
+        assert!(validate_content_type(None, "archive.zip").is_ok());
+    }
+
+    #[test]
+    fn test_validate_content_type_html_with_charset() {
+        assert!(validate_content_type(Some("text/html; charset=utf-8"), "installer.exe").is_err());
+    }
+
+    #[test]
+    fn test_validate_content_type_htm_extension() {
+        assert!(validate_content_type(Some("text/html"), "page.htm").is_ok());
+    }
+
+    #[test]
+    fn test_validate_content_type_xhtml_extension() {
+        assert!(validate_content_type(Some("text/html"), "page.xhtml").is_ok());
+    }
+
+    #[test]
+    fn test_validate_content_type_no_extension() {
+        assert!(validate_content_type(Some("text/html"), "somefile").is_err());
+    }
 
     #[test]
     fn test_sanitize_normal_filename() {

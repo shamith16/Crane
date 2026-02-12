@@ -579,6 +579,7 @@ name = "crane-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "crc32fast",
  "dirs",
  "futures-util",
  "md-5",

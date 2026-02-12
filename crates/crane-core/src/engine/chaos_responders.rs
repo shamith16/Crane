@@ -153,7 +153,7 @@ impl Default for GarbagePayloadResponder {
 impl wiremock::Respond for GarbagePayloadResponder {
     fn respond(&self, _request: &wiremock::Request) -> wiremock::ResponseTemplate {
         wiremock::ResponseTemplate::new(200)
-            .set_body_string(&self.html_body)
+            .set_body_bytes(self.html_body.as_bytes().to_vec())
             .insert_header("Content-Type", "text/html")
             .insert_header("Content-Length", self.html_body.len().to_string().as_str())
     }

@@ -18,6 +18,7 @@ pub struct QueueManager {
     db: Arc<Database>,
     active: tokio::sync::Mutex<HashMap<String, DownloadHandle>>,
     max_concurrent: u32,
+    max_queue_size: u32,
 }
 
 impl QueueManager {
@@ -27,7 +28,14 @@ impl QueueManager {
             db,
             active: tokio::sync::Mutex::new(HashMap::new()),
             max_concurrent,
+            max_queue_size: 1000,
         }
+    }
+
+    /// Set the maximum number of non-terminal downloads allowed in the queue.
+    pub fn with_max_queue_size(mut self, max: u32) -> Self {
+        self.max_queue_size = max;
+        self
     }
 
     /// Accessor for the underlying database.
@@ -43,6 +51,14 @@ impl QueueManager {
         save_dir: &str,
         options: DownloadOptions,
     ) -> Result<String, CraneError> {
+        // Check queue capacity
+        let total_count = self.db.count_non_terminal_downloads()?;
+        if total_count >= self.max_queue_size {
+            return Err(CraneError::QueueFull {
+                max: self.max_queue_size,
+            });
+        }
+
         // Reject duplicate URLs that are already active
         if self.db.has_active_url(url)? {
             return Err(CraneError::DuplicateUrl(url.to_string()));
@@ -1127,7 +1143,152 @@ mod tests {
         assert_eq!(qm.active_count().await, 1);
     }
 
-    // ── Test 17: duplicate URL is rejected while download is active ──
+    // ── Test 17: queue backpressure rejects when full ──
+
+    #[tokio::test]
+    async fn test_queue_backpressure_rejects_when_full() {
+        let server = setup_server().await;
+        setup_server_file2(&server).await;
+        // A third file for the third add attempt
+        Mock::given(method("HEAD"))
+            .and(path("/file3.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-length", "1024")
+                    .insert_header("accept-ranges", "bytes")
+                    .insert_header("content-type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 1).with_max_queue_size(2);
+
+        let url1 = format!("{}/file.bin", server.uri());
+        qm.add_download(
+            &url1,
+            tmp.path().to_str().unwrap(),
+            DownloadOptions::default(),
+        )
+        .await
+        .unwrap();
+
+        let url2 = format!("{}/file2.bin", server.uri());
+        qm.add_download(
+            &url2,
+            tmp.path().to_str().unwrap(),
+            DownloadOptions {
+                filename: Some("file2.bin".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // Third add should fail — queue is full (2 non-terminal downloads)
+        let url3 = format!("{}/file3.bin", server.uri());
+        let result = qm
+            .add_download(
+                &url3,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions {
+                    filename: Some("file3.bin".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(
+            matches!(result.unwrap_err(), CraneError::QueueFull { max: 2 }),
+            "expected QueueFull with max=2"
+        );
+    }
+
+    // ── Test 18: queue backpressure allows after completion ──
+
+    #[tokio::test]
+    async fn test_queue_backpressure_allows_after_completion() {
+        let server = setup_server().await;
+        setup_server_file2(&server).await;
+        Mock::given(method("HEAD"))
+            .and(path("/file3.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-length", "1024")
+                    .insert_header("accept-ranges", "bytes")
+                    .insert_header("content-type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/file3.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(vec![0xCC; 1024])
+                    .insert_header("content-length", "1024")
+                    .insert_header("content-type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3).with_max_queue_size(2);
+
+        let url1 = format!("{}/file.bin", server.uri());
+        let id1 = qm
+            .add_download(
+                &url1,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        let url2 = format!("{}/file2.bin", server.uri());
+        qm.add_download(
+            &url2,
+            tmp.path().to_str().unwrap(),
+            DownloadOptions {
+                filename: Some("file2.bin".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // Mark the first download as completed directly in the DB
+        db.update_download_status(&id1, DownloadStatus::Completed, None, None)
+            .unwrap();
+
+        // Now adding a third should succeed (only 1 non-terminal remains)
+        let url3 = format!("{}/file3.bin", server.uri());
+        let result = qm
+            .add_download(
+                &url3,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions {
+                    filename: Some("file3.bin".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert!(result.is_ok(), "should allow adding after completion");
+    }
+
+    // ── Test 19: queue backpressure default limit ──
+
+    #[tokio::test]
+    async fn test_queue_backpressure_default_limit() {
+        let db = make_db();
+        let qm = QueueManager::new(db, 3);
+        assert_eq!(qm.max_queue_size, 1000);
+    }
+
+    // ── Test 20: duplicate URL is rejected while download is active ──
 
     #[tokio::test]
     async fn test_duplicate_url_rejected() {
