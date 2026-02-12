@@ -1,4 +1,5 @@
 use crane_core::db::Database;
+use crane_core::metadata::sanitize_filename;
 use crane_core::types::{Download, DownloadStatus, FileCategory};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -130,8 +131,9 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
 
     let source_domain = parsed_url.host_str().map(|h| h.to_string());
 
-    // Use provided filename or derive from URL path
-    let filename = msg
+    // Use provided filename or derive from URL path, then sanitize
+    // to prevent path traversal attacks (e.g., "../../.ssh/authorized_keys").
+    let raw_filename = msg
         .get("filename")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
@@ -143,6 +145,7 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
                 .unwrap_or("download")
                 .to_string()
         });
+    let filename = sanitize_filename(&raw_filename);
 
     let file_size = msg.get("fileSize").and_then(|v| v.as_u64());
 
@@ -334,6 +337,70 @@ mod tests {
         assert_eq!(dl.category, FileCategory::Documents);
         assert_eq!(dl.referrer.as_deref(), Some("https://example.com/page"));
         assert_eq!(dl.mime_type.as_deref(), Some("application/pdf"));
+    }
+
+    #[test]
+    fn test_handle_download_path_traversal_filename() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://evil.com/payload",
+            "filename": "../../.ssh/authorized_keys"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+
+        assert_eq!(response["type"], "accepted");
+        let download_id = response["downloadId"].as_str().unwrap();
+        let dl = db.get_download(download_id).unwrap();
+
+        // Filename should be sanitized to just "authorized_keys"
+        assert_eq!(dl.filename, "authorized_keys");
+        assert!(
+            dl.save_path.starts_with("/downloads"),
+            "save_path should stay within /downloads, got: {}",
+            dl.save_path
+        );
+        assert!(!dl.save_path.contains(".."));
+    }
+
+    #[test]
+    fn test_handle_download_absolute_path_filename() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://evil.com/payload",
+            "filename": "/etc/cron.d/backdoor"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+
+        assert_eq!(response["type"], "accepted");
+        let download_id = response["downloadId"].as_str().unwrap();
+        let dl = db.get_download(download_id).unwrap();
+
+        // Filename should be sanitized to just "backdoor"
+        assert_eq!(dl.filename, "backdoor");
+        assert!(dl.save_path.starts_with("/downloads"));
+    }
+
+    #[test]
+    fn test_handle_download_dotdot_filename() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://evil.com/payload",
+            "filename": ".."
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+
+        assert_eq!(response["type"], "accepted");
+        let download_id = response["downloadId"].as_str().unwrap();
+        let dl = db.get_download(download_id).unwrap();
+
+        // ".." should be sanitized to "download"
+        assert_eq!(dl.filename, "download");
     }
 
     #[test]

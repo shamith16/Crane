@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use crate::metadata::mime::{categorize_extension, categorize_mime};
+use crate::metadata::sanitize_filename;
 use crate::types::{CraneError, FileCategory, UrlAnalysis};
 
 const USER_AGENT: &str = "Crane/0.1.0";
@@ -78,8 +79,9 @@ pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
         .and_then(|v| v.to_str().ok())
         .map(|v| v.to_string());
 
-    let filename = extract_filename_from_headers(headers)
+    let raw_filename = extract_filename_from_headers(headers)
         .unwrap_or_else(|| extract_filename_from_url(&parsed));
+    let filename = sanitize_filename(&raw_filename);
 
     let category = match &mime_type {
         Some(mime) => {
@@ -375,6 +377,77 @@ mod tests {
         let result = analyze_url(&url).await.unwrap();
 
         assert!(result.url.contains("/file.zip"));
+    }
+
+    #[tokio::test]
+    async fn test_content_disposition_path_traversal_sanitized() {
+        let server = MockServer::start().await;
+        Mock::given(method("HEAD"))
+            .and(path("/download"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header(
+                        "Content-Disposition",
+                        "attachment; filename=\"../../.ssh/authorized_keys\"",
+                    )
+                    .insert_header("Content-Type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/download", server.uri());
+        let result = analyze_url(&url).await.unwrap();
+
+        assert_eq!(result.filename, "authorized_keys");
+        assert!(!result.filename.contains(".."));
+        assert!(!result.filename.contains('/'));
+    }
+
+    #[tokio::test]
+    async fn test_content_disposition_absolute_path_sanitized() {
+        let server = MockServer::start().await;
+        Mock::given(method("HEAD"))
+            .and(path("/download"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header(
+                        "Content-Disposition",
+                        "attachment; filename=\"/etc/passwd\"",
+                    )
+                    .insert_header("Content-Type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/download", server.uri());
+        let result = analyze_url(&url).await.unwrap();
+
+        assert_eq!(result.filename, "passwd");
+    }
+
+    #[tokio::test]
+    async fn test_content_disposition_utf8_traversal_sanitized() {
+        let server = MockServer::start().await;
+        Mock::given(method("HEAD"))
+            .and(path("/download"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header(
+                        "Content-Disposition",
+                        "attachment; filename*=UTF-8''..%2F..%2F.bashrc",
+                    )
+                    .insert_header("Content-Type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/download", server.uri());
+        let result = analyze_url(&url).await.unwrap();
+
+        // Should strip traversal and leading dot
+        assert!(!result.filename.contains(".."));
+        assert!(!result.filename.contains('/'));
+        assert_eq!(result.filename, "bashrc");
     }
 
     #[tokio::test]

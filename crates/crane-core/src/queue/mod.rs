@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::db::Database;
 use crate::engine::multi::{start_download, DownloadHandle};
 use crate::metadata::analyzer::analyze_url;
+use crate::metadata::sanitize_filename;
 use crate::types::{CraneError, Download, DownloadOptions, DownloadProgress, DownloadStatus};
 
 /// Manages download concurrency: starts downloads immediately when under the
@@ -51,11 +52,23 @@ impl QueueManager {
         let analysis = analyze_url(url).await?;
 
         let id = uuid::Uuid::new_v4().to_string();
-        let filename = options
+        let raw_filename = options
             .filename
             .clone()
             .unwrap_or_else(|| analysis.filename.clone());
+        let filename = sanitize_filename(&raw_filename);
         let save_path = PathBuf::from(save_dir).join(&filename);
+
+        // Defense-in-depth: verify the resolved path stays within save_dir
+        let canonical_dir = Path::new(save_dir)
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(save_dir));
+        let canonical_path = save_path
+            .canonicalize()
+            .unwrap_or_else(|_| canonical_dir.join(&filename));
+        if !canonical_path.starts_with(&canonical_dir) {
+            return Err(CraneError::PathTraversal(filename));
+        }
         let now = chrono::Utc::now().to_rfc3339();
 
         let download = Download {

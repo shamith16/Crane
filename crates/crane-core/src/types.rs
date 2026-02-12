@@ -246,6 +246,9 @@ pub enum CraneError {
     #[error("Duplicate URL: {0}")]
     DuplicateUrl(String),
 
+    #[error("Path traversal rejected: {0}")]
+    PathTraversal(String),
+
     #[error("Database error: {0}")]
     Database(String),
 }
