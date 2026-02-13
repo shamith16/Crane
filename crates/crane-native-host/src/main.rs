@@ -203,7 +203,7 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
     let cookies = msg
         .get("cookies")
         .and_then(|v| v.as_str())
-        .map(|s| filter_sensitive_cookies(s));
+        .map(filter_sensitive_cookies);
 
     let category = categorize_mime(mime_type.as_deref());
 

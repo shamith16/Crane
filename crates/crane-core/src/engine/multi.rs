@@ -866,6 +866,7 @@ fn plan_chunks(total_size: u64, requested_connections: u32) -> Vec<ChunkPlan> {
 }
 
 /// Download a single chunk with retry logic.
+#[allow(clippy::too_many_arguments)]
 async fn download_chunk(
     client: &reqwest::Client,
     url: &str,

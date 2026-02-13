@@ -128,10 +128,7 @@ pub fn safe_redirect_policy() -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(|attempt| {
         // Limit redirect depth
         if attempt.previous().len() > 10 {
-            return attempt.error(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "too many redirects",
-            ));
+            return attempt.error(std::io::Error::other("too many redirects"));
         }
 
         // Extract URL info before consuming `attempt`
@@ -142,8 +139,7 @@ pub fn safe_redirect_policy() -> reqwest::redirect::Policy {
         match scheme.as_str() {
             "http" | "https" => {}
             _ => {
-                return attempt.error(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return attempt.error(std::io::Error::other(
                     format!("redirect to unsupported scheme: {scheme}"),
                 ));
             }
@@ -152,8 +148,7 @@ pub fn safe_redirect_policy() -> reqwest::redirect::Policy {
         // Validate host is not private
         if let Some(ref host) = host {
             if !is_public_host(host) {
-                return attempt.error(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return attempt.error(std::io::Error::other(
                     format!("redirect to private/internal host blocked: {host}"),
                 ));
             }
