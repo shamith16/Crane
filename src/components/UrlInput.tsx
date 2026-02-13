@@ -2,7 +2,7 @@ import { createSignal, createMemo, For, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import { analyzeUrl, addDownload } from "../lib/commands";
 import { formatSize } from "../lib/format";
-import type { UrlAnalysis, DownloadOptions, FileCategory } from "../lib/types";
+import type { UrlAnalysis, DownloadOptions, FileCategory, ExpectedHash } from "../lib/types";
 
 const ALL_CATEGORIES: FileCategory[] = [
   "documents",
@@ -46,6 +46,8 @@ export default function UrlInput(props: Props) {
   const [filenameOverride, setFilenameOverride] = createSignal("");
   const [connections, setConnections] = createSignal(8);
   const [category, setCategory] = createSignal<FileCategory>("other");
+  const [hashAlgorithm, setHashAlgorithm] = createSignal<ExpectedHash["algorithm"]>("sha256");
+  const [hashValue, setHashValue] = createSignal("");
 
   // ─── Batch mode state ───────────────────────────
   const [batchMode, setBatchMode] = createSignal(false);
@@ -64,6 +66,8 @@ export default function UrlInput(props: Props) {
     setFilenameOverride("");
     setConnections(8);
     setCategory("other");
+    setHashAlgorithm("sha256");
+    setHashValue("");
   }
 
   function applyAnalysisToOptions(result: UrlAnalysis) {
@@ -81,6 +85,11 @@ export default function UrlInput(props: Props) {
     if (fn && (!a || fn !== a.filename)) opts.filename = fn;
     if (connections() !== 8) opts.connections = connections();
     if (a && category() !== a.category) opts.category = category();
+
+    const hv = hashValue().trim();
+    if (hv) {
+      opts.expected_hash = { algorithm: hashAlgorithm(), value: hv };
+    }
 
     return Object.keys(opts).length > 0 ? opts : undefined;
   }
@@ -354,6 +363,26 @@ export default function UrlInput(props: Props) {
                   )}
                 </For>
               </select>
+            </div>
+
+            {/* Hash verification */}
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-text-secondary w-24 shrink-0">Verify hash</label>
+              <select
+                value={hashAlgorithm()}
+                onChange={(e) => setHashAlgorithm(e.currentTarget.value as ExpectedHash["algorithm"])}
+                class="w-24 bg-background border border-border rounded px-3 py-1.5 text-xs text-text-primary outline-none focus:border-active transition-colors"
+              >
+                <option value="sha256">SHA-256</option>
+                <option value="md5">MD5</option>
+              </select>
+              <input
+                type="text"
+                value={hashValue()}
+                onInput={(e) => setHashValue(e.currentTarget.value)}
+                placeholder="Paste expected hash (optional)"
+                class="flex-1 bg-background border border-border rounded px-3 py-1.5 text-xs text-text-primary placeholder-text-muted outline-none focus:border-active transition-colors font-mono"
+              />
             </div>
           </div>
         </Show>

@@ -69,6 +69,11 @@ export interface ConnectionProgress {
   range_end: number;
 }
 
+export interface ExpectedHash {
+  algorithm: "sha256" | "md5";
+  value: string;
+}
+
 export interface DownloadOptions {
   save_path?: string;
   filename?: string;
@@ -78,6 +83,7 @@ export interface DownloadOptions {
   cookies?: string;
   user_agent?: string;
   headers?: Record<string, string>;
+  expected_hash?: ExpectedHash;
 }
 
 // ─── Config Types ──────────────────────────────
