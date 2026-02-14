@@ -7,3 +7,4 @@ pub mod metadata;
 pub mod network;
 pub mod queue;
 pub mod types;
+pub mod protocol;
