@@ -1,4 +1,5 @@
 import { For, Show, createMemo } from "solid-js";
+import type { JSX } from "solid-js";
 import type { Download } from "../../lib/types";
 import {
   sidebarCollapsed,
@@ -10,29 +11,48 @@ import {
   type StatusFilter,
   type CategoryFilter,
 } from "../../stores/ui";
+import {
+  Download as DownloadIcon,
+  Play,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Pause,
+  FileText,
+  Video,
+  Music,
+  Image as ImageIcon,
+  Archive,
+  Box,
+  File,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-solid";
 
 interface Props {
   downloads: Download[];
 }
 
-const STATUS_FILTERS: { key: StatusFilter; label: string; icon: string }[] = [
-  { key: "all", label: "All Downloads", icon: "\u2193" },
-  { key: "downloading", label: "Active", icon: "\u25B6" },
-  { key: "queued", label: "Queued", icon: "\u23F3" },
-  { key: "completed", label: "Completed", icon: "\u2713" },
-  { key: "failed", label: "Failed", icon: "\u2715" },
-  { key: "paused", label: "Paused", icon: "\u23F8" },
+const ICON_PROPS = { size: 18, "stroke-width": 1.75 };
+
+const STATUS_FILTERS: { key: StatusFilter; label: string; icon: () => JSX.Element }[] = [
+  { key: "all", label: "All Downloads", icon: () => <DownloadIcon {...ICON_PROPS} /> },
+  { key: "downloading", label: "Active", icon: () => <Play {...ICON_PROPS} /> },
+  { key: "queued", label: "Queued", icon: () => <Clock {...ICON_PROPS} /> },
+  { key: "completed", label: "Completed", icon: () => <CheckCircle {...ICON_PROPS} /> },
+  { key: "failed", label: "Failed", icon: () => <XCircle {...ICON_PROPS} /> },
+  { key: "paused", label: "Paused", icon: () => <Pause {...ICON_PROPS} /> },
 ];
 
-const CATEGORY_FILTERS: { key: CategoryFilter; label: string; icon: string }[] = [
-  { key: "all", label: "All Types", icon: "\u25FB" },
-  { key: "documents", label: "Documents", icon: "\uD83D\uDCC4" },
-  { key: "video", label: "Video", icon: "\uD83C\uDFAC" },
-  { key: "audio", label: "Audio", icon: "\uD83C\uDFB5" },
-  { key: "images", label: "Images", icon: "\uD83D\uDDBC" },
-  { key: "archives", label: "Archives", icon: "\uD83D\uDCE6" },
-  { key: "software", label: "Software", icon: "\uD83D\uDCBF" },
-  { key: "other", label: "Other", icon: "\u25EF" },
+const CATEGORY_FILTERS: { key: CategoryFilter; label: string; icon: () => JSX.Element }[] = [
+  { key: "all", label: "All Types", icon: () => <File {...ICON_PROPS} /> },
+  { key: "documents", label: "Documents", icon: () => <FileText {...ICON_PROPS} /> },
+  { key: "video", label: "Video", icon: () => <Video {...ICON_PROPS} /> },
+  { key: "audio", label: "Audio", icon: () => <Music {...ICON_PROPS} /> },
+  { key: "images", label: "Images", icon: () => <ImageIcon {...ICON_PROPS} /> },
+  { key: "archives", label: "Archives", icon: () => <Archive {...ICON_PROPS} /> },
+  { key: "software", label: "Software", icon: () => <Box {...ICON_PROPS} /> },
+  { key: "other", label: "Other", icon: () => <File {...ICON_PROPS} /> },
 ];
 
 export default function Sidebar(props: Props) {
@@ -63,10 +83,10 @@ export default function Sidebar(props: Props) {
       {/* Collapse toggle */}
       <button
         onClick={toggleSidebar}
-        class="flex items-center justify-center h-8 mt-1 mx-1 rounded hover:bg-surface-hover text-text-muted text-xs"
+        class="flex items-center justify-center h-8 mt-1 mx-1 rounded hover:bg-surface-hover text-text-muted transition-colors"
         title={collapsed() ? "Expand sidebar" : "Collapse sidebar"}
       >
-        {collapsed() ? "\u25B6" : "\u25C0"}
+        {collapsed() ? <ChevronRight size={16} stroke-width={1.75} /> : <ChevronLeft size={16} stroke-width={1.75} />}
       </button>
 
       {/* Status filters */}
@@ -86,12 +106,12 @@ export default function Sidebar(props: Props) {
                 onClick={() => setStatusFilter(filter.key)}
                 class={`flex items-center w-full px-3 py-1.5 text-xs transition-colors ${
                   active()
-                    ? "bg-surface-hover text-text-primary"
-                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                } ${collapsed() ? "justify-center" : "gap-2"}`}
+                    ? "bg-active/10 text-active font-medium border-l-2 border-l-active"
+                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary border-l-2 border-l-transparent"
+                } ${collapsed() ? "justify-center" : "gap-2.5"}`}
                 title={collapsed() ? `${filter.label} (${count()})` : undefined}
               >
-                <span class="flex-shrink-0 w-4 text-center">{filter.icon}</span>
+                <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
                 <Show when={!collapsed()}>
                   <span class="flex-1 text-left truncate">{filter.label}</span>
                   <span class="text-text-muted tabular-nums">{count()}</span>
@@ -119,12 +139,12 @@ export default function Sidebar(props: Props) {
                 onClick={() => setCategoryFilter(filter.key)}
                 class={`flex items-center w-full px-3 py-1.5 text-xs transition-colors ${
                   active()
-                    ? "bg-surface-hover text-text-primary"
-                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                } ${collapsed() ? "justify-center" : "gap-2"}`}
+                    ? "bg-active/10 text-active font-medium border-l-2 border-l-active"
+                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary border-l-2 border-l-transparent"
+                } ${collapsed() ? "justify-center" : "gap-2.5"}`}
                 title={collapsed() ? `${filter.label} (${count()})` : undefined}
               >
-                <span class="flex-shrink-0 w-4 text-center">{filter.icon}</span>
+                <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
                 <Show when={!collapsed()}>
                   <span class="flex-1 text-left truncate">{filter.label}</span>
                   <span class="text-text-muted tabular-nums">{count()}</span>

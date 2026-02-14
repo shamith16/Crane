@@ -2,33 +2,44 @@
 
 @layer base {
   :root {
-    --bg: #0D0D0D;
-    --surface: #161616;
-    --surface-hover: #1E1E1E;
-    --border: #2A2A2A;
-    --text-primary: #E8E8E8;
-    --text-secondary: #888888;
-    --text-muted: #555555;
-    --active: #3B82F6;
-    --success: #22C55E;
-    --warning: #F59E0B;
-    --error: #EF4444;
-    --accent: #8B5CF6;
+    --bg: #09090B;
+    --surface: #131316;
+    --surface-hover: #1C1C21;
+    --border: rgba(255, 255, 255, 0.06);
+    --text-primary: #EDEDEF;
+    --text-secondary: #8B8B8F;
+    --text-muted: #52525B;
+    --active: #6366F1;
+    --success: #34D399;
+    --warning: #FBBF24;
+    --error: #F87171;
+    --accent: #A855F7;
+
+    /* Glass & glow */
+    --glass: rgba(255, 255, 255, 0.04);
+    --glow-active: 0 0 20px rgba(99, 102, 241, 0.25);
+    --glow-success: 0 0 16px rgba(52, 211, 153, 0.2);
+    --glow-error: 0 0 16px rgba(248, 113, 113, 0.2);
   }
 
   .light {
     --bg: #FAFAFA;
     --surface: #FFFFFF;
-    --surface-hover: #F5F5F5;
-    --border: #E5E5E5;
-    --text-primary: #1A1A1A;
-    --text-secondary: #666666;
-    --text-muted: #999999;
-    --active: #2563EB;
-    --success: #16A34A;
-    --warning: #D97706;
-    --error: #DC2626;
-    --accent: #7C3AED;
+    --surface-hover: #F4F4F5;
+    --border: #E4E4E7;
+    --text-primary: #18181B;
+    --text-secondary: #71717A;
+    --text-muted: #A1A1AA;
+    --active: #4F46E5;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --error: #EF4444;
+    --accent: #8B5CF6;
+
+    --glass: rgba(0, 0, 0, 0.02);
+    --glow-active: 0 0 12px rgba(79, 70, 229, 0.15);
+    --glow-success: 0 0 12px rgba(16, 185, 129, 0.15);
+    --glow-error: 0 0 12px rgba(239, 68, 68, 0.15);
   }
 
   body {
@@ -51,4 +62,79 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-accent: var(--accent);
+  --color-glass: var(--glass);
+}
+
+/* ─── Gradient accent ───────────────────────────── */
+@layer utilities {
+  .gradient-accent {
+    background: linear-gradient(135deg, var(--active), var(--accent));
+  }
+
+  .glow-active {
+    box-shadow: var(--glow-active);
+  }
+
+  .glow-success {
+    box-shadow: var(--glow-success);
+  }
+}
+
+/* ─── Progress shimmer animation ────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@layer utilities {
+  .progress-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--active) 0%,
+      var(--accent) 40%,
+      color-mix(in srgb, var(--accent), white 30%) 50%,
+      var(--accent) 60%,
+      var(--active) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+}
+
+/* ─── Tooltip styles (Kobalte) ──────────────────── */
+.tooltip-content {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: tooltip-in 150ms ease-out;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Micro-animations ──────────────────────────── */
+@layer utilities {
+  .animate-slide-in {
+    animation: slide-in 200ms ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 150ms ease-out;
+  }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
