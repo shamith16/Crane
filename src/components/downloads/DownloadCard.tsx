@@ -16,6 +16,7 @@ import {
   openFolder,
 } from "../../lib/commands";
 import { Pause as PauseIcon, Play, RotateCcw, ExternalLink, FolderOpen, RefreshCw } from "lucide-solid";
+import { Tooltip } from "@kobalte/core/tooltip";
 
 // ─── Status styling ─────────────────────────────
 
@@ -229,58 +230,100 @@ export default function DownloadCard(props: Props) {
         {/* Hover actions */}
         <div class="flex gap-1 items-center">
           <Show when={dl().status === "downloading"}>
-            <button
-              onClick={handlePause}
-              class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover opacity-0 group-hover:opacity-100 transition-all"
-              title="Pause"
-            >
-              <PauseIcon size={15} stroke-width={1.75} />
-            </button>
+            <Tooltip openDelay={300}>
+              <Tooltip.Trigger
+                as="button"
+                onClick={handlePause}
+                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <PauseIcon size={15} stroke-width={1.75} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="tooltip-content">
+                  Pause
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip>
           </Show>
 
           <Show when={dl().status === "paused"}>
-            <button
-              onClick={handleResume}
-              class="p-1.5 rounded-md text-text-secondary hover:text-active hover:bg-active/10 opacity-0 group-hover:opacity-100 transition-all"
-              title="Resume"
-            >
-              <Play size={15} stroke-width={1.75} />
-            </button>
+            <Tooltip openDelay={300}>
+              <Tooltip.Trigger
+                as="button"
+                onClick={handleResume}
+                class="p-1.5 rounded-md text-text-secondary hover:text-active hover:bg-active/10 opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <Play size={15} stroke-width={1.75} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="tooltip-content">
+                  Resume
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip>
           </Show>
 
           <Show when={dl().status === "failed"}>
-            <button
-              onClick={handleRetry}
-              class="p-1.5 rounded-md text-error hover:bg-error/10 transition-all"
-              title="Retry"
-            >
-              <RotateCcw size={15} stroke-width={1.75} />
-            </button>
+            <Tooltip openDelay={300}>
+              <Tooltip.Trigger
+                as="button"
+                onClick={handleRetry}
+                class="p-1.5 rounded-md text-error hover:bg-error/10 transition-all"
+              >
+                <RotateCcw size={15} stroke-width={1.75} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="tooltip-content">
+                  Retry
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip>
           </Show>
 
           <Show when={dl().status === "completed"}>
             <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={handleOpenFile}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
-                title="Open file"
-              >
-                <ExternalLink size={15} stroke-width={1.75} />
-              </button>
-              <button
-                onClick={handleOpenFolder}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
-                title="Open folder"
-              >
-                <FolderOpen size={15} stroke-width={1.75} />
-              </button>
-              <button
-                onClick={handleRedownload}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
-                title="Redownload"
-              >
-                <RefreshCw size={15} stroke-width={1.75} />
-              </button>
+              <Tooltip openDelay={300}>
+                <Tooltip.Trigger
+                  as="button"
+                  onClick={handleOpenFile}
+                  class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                >
+                  <ExternalLink size={15} stroke-width={1.75} />
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content class="tooltip-content">
+                    Open file
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip>
+              <Tooltip openDelay={300}>
+                <Tooltip.Trigger
+                  as="button"
+                  onClick={handleOpenFolder}
+                  class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                >
+                  <FolderOpen size={15} stroke-width={1.75} />
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content class="tooltip-content">
+                    Open folder
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip>
+              <Tooltip openDelay={300}>
+                <Tooltip.Trigger
+                  as="button"
+                  onClick={handleRedownload}
+                  class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                >
+                  <RefreshCw size={15} stroke-width={1.75} />
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content class="tooltip-content">
+                    Redownload
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip>
             </div>
           </Show>
         </div>
