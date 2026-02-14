@@ -15,6 +15,7 @@ import {
   openFile,
   openFolder,
 } from "../../lib/commands";
+import { Pause as PauseIcon, Play, RotateCcw, ExternalLink, FolderOpen, RefreshCw } from "lucide-solid";
 
 // ─── Status styling ─────────────────────────────
 
@@ -227,56 +228,58 @@ export default function DownloadCard(props: Props) {
 
         {/* Hover actions */}
         <div class="flex gap-1 items-center">
-          {/* Active downloads: pause button on hover */}
           <Show when={dl().status === "downloading"}>
             <button
               onClick={handlePause}
-              class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover opacity-0 group-hover:opacity-100 transition-all"
+              title="Pause"
             >
-              Pause
+              <PauseIcon size={15} stroke-width={1.75} />
             </button>
           </Show>
 
-          {/* Paused downloads: resume button on hover */}
           <Show when={dl().status === "paused"}>
             <button
               onClick={handleResume}
-              class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              class="p-1.5 rounded-md text-text-secondary hover:text-active hover:bg-active/10 opacity-0 group-hover:opacity-100 transition-all"
+              title="Resume"
             >
-              Resume
+              <Play size={15} stroke-width={1.75} />
             </button>
           </Show>
 
-          {/* Failed downloads: retry always visible */}
           <Show when={dl().status === "failed"}>
             <button
               onClick={handleRetry}
-              class="px-2.5 py-1 text-xs bg-error/20 hover:bg-error/30 text-error rounded"
+              class="p-1.5 rounded-md text-error hover:bg-error/10 transition-all"
+              title="Retry"
             >
-              Retry
+              <RotateCcw size={15} stroke-width={1.75} />
             </button>
           </Show>
 
-          {/* Completed downloads: hover actions */}
           <Show when={dl().status === "completed"}>
-            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={handleOpenFile}
-                class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
+                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                title="Open file"
               >
-                Open File
+                <ExternalLink size={15} stroke-width={1.75} />
               </button>
               <button
                 onClick={handleOpenFolder}
-                class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
+                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                title="Open folder"
               >
-                Open Folder
+                <FolderOpen size={15} stroke-width={1.75} />
               </button>
               <button
                 onClick={handleRedownload}
-                class="px-2.5 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded"
+                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                title="Redownload"
               >
-                Redownload
+                <RefreshCw size={15} stroke-width={1.75} />
               </button>
             </div>
           </Show>
@@ -285,10 +288,10 @@ export default function DownloadCard(props: Props) {
 
       {/* Progress bar for downloading/paused */}
       <Show when={dl().status === "downloading" || dl().status === "paused" || dl().status === "analyzing"}>
-        <div class="mt-2 h-1 bg-surface rounded-full overflow-hidden">
+        <div class="mt-2 h-1.5 bg-surface rounded-full overflow-hidden">
           <div
             class={`h-full rounded-full transition-all duration-300 ${
-              dl().status === "paused" ? "bg-warning" : "bg-active"
+              dl().status === "paused" ? "bg-warning" : "progress-shimmer"
             }`}
             style={{ width: `${percentComplete()}%` }}
           />
