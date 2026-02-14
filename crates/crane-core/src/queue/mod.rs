@@ -351,6 +351,8 @@ impl QueueManager {
     /// Pick up externally-inserted pending downloads (e.g., from the native messaging sidecar).
     /// For each pending download not already in the active map, starts it if there's capacity
     /// or queues it otherwise. Returns the IDs of downloads that were started.
+    /// Errors for individual downloads are caught and logged — one bad download won't
+    /// prevent others from being processed.
     pub async fn check_pending(&self, _default_save_dir: &str) -> Result<Vec<String>, CraneError> {
         let pending = self.db.get_downloads_by_status(DownloadStatus::Pending)?;
         let mut started = Vec::new();
@@ -373,9 +375,23 @@ impl QueueManager {
                     user_agent: dl.user_agent.clone(),
                     ..Default::default()
                 };
-                self.start_download_internal(&dl.id, &save_path, &options, &mut active)
-                    .await?;
-                started.push(dl.id.clone());
+                match self
+                    .start_download_internal(&dl.id, &save_path, &options, &mut active)
+                    .await
+                {
+                    Ok(()) => {
+                        started.push(dl.id.clone());
+                    }
+                    Err(e) => {
+                        eprintln!("check_pending: failed to start download {}: {e}", dl.id);
+                        let _ = self.db.update_download_status(
+                            &dl.id,
+                            DownloadStatus::Failed,
+                            Some(&e.to_string()),
+                            None,
+                        );
+                    }
+                }
             } else {
                 let max_pos = self.db.get_max_queue_position()?.unwrap_or(0);
                 self.db.update_queue_position(&dl.id, Some(max_pos + 1))?;

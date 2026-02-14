@@ -1,4 +1,5 @@
 import { For, Show, createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { getDownloads, subscribeProgress } from "../lib/commands";
 import type { Download, DownloadProgress } from "../lib/types";
 import { statusFilter, categoryFilter } from "../stores/ui";
@@ -81,7 +82,7 @@ interface Props {
 }
 
 export default function DownloadList(props: Props) {
-  const [downloads, setDownloads] = createSignal<Download[]>([]);
+  const [downloads, setDownloads] = createStore<Download[]>([]);
   const [progressMap, setProgressMap] = createSignal<Record<string, DownloadProgress>>({});
   const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set());
   let pollInterval: ReturnType<typeof setInterval>;
@@ -92,7 +93,7 @@ export default function DownloadList(props: Props) {
   async function refresh() {
     try {
       const list = await getDownloads();
-      setDownloads(list);
+      setDownloads(reconcile(list, { key: "id", merge: false }));
       props.onDownloadsLoaded?.(list);
 
       // Subscribe to progress for active downloads
@@ -127,7 +128,7 @@ export default function DownloadList(props: Props) {
   // ─── Filtering ────────────────────────────────
 
   const filteredDownloads = createMemo(() => {
-    let list = downloads();
+    let list = [...downloads];
 
     const sf = statusFilter();
     if (sf !== "all") {
@@ -179,7 +180,7 @@ export default function DownloadList(props: Props) {
         fallback={
           <div class="flex items-center justify-center h-full">
             <p class="text-sm text-text-muted">
-              {downloads().length === 0
+              {downloads.length === 0
                 ? "No downloads yet. Paste a URL above to start."
                 : "No downloads match the current filter."}
             </p>

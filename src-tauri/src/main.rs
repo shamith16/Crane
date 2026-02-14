@@ -71,7 +71,9 @@ fn main() {
                         )
                         .await;
                     }
-                    let _ = monitor_queue.check_pending(&monitor_save_dir).await;
+                    if let Err(e) = monitor_queue.check_pending(&monitor_save_dir).await {
+                        eprintln!("check_pending error: {e}");
+                    }
                 }
             });
 

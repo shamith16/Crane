@@ -83,7 +83,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
       referrer: downloadItem.referrer || "",
     });
 
-    if (response && response.status === "accepted") {
+    if (response && response.type === "accepted") {
       // Crane accepted the download — cancel and erase the browser copy
       await chrome.downloads.cancel(downloadItem.id);
       await chrome.downloads.erase({ id: downloadItem.id });
