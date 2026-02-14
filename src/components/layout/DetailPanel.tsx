@@ -1,4 +1,5 @@
 import { Show, Switch, Match, createEffect, createSignal, onCleanup } from "solid-js";
+import { X } from "lucide-solid";
 import { selectedDownloadId, closeDetailPanel } from "../../stores/ui";
 import {
   getDownload,
@@ -529,7 +530,7 @@ export default function DetailPanel() {
             onClick={closeDetailPanel}
             class="ml-2 flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
           >
-            {"\u2715"}
+            <X size={14} stroke-width={1.75} />
           </button>
         </div>
 
