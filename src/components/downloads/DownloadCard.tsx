@@ -196,7 +196,7 @@ export default function DownloadCard(props: Props) {
 
   return (
     <div
-      class={`px-4 py-3 cursor-pointer transition-colors group ${leftAccentClass(dl().status)} ${
+      class={`px-4 py-3 cursor-pointer transition-colors group animate-slide-in ${leftAccentClass(dl().status)} ${
         isSelected()
           ? "bg-active/10"
           : "hover:bg-surface-hover"
