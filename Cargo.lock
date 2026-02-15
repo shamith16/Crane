@@ -667,10 +667,12 @@ dependencies = [
  "chrono",
  "crc32fast",
  "dirs",
+ "futures-rustls",
  "futures-util",
  "md-5",
  "reqwest 0.12.28",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -685,6 +687,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "webpki-roots",
  "wiremock",
 ]
 

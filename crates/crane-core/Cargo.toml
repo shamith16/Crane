@@ -24,6 +24,9 @@ dirs = "6"
 crc32fast = "1"
 suppaftp = { version = "6", features = ["async-rustls"] }
 async-trait = "0.1"
+futures-rustls = "0.26"
+rustls = "0.23"
+webpki-roots = "1"
 
 [dev-dependencies]
 wiremock = "0.6"
