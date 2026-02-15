@@ -10,10 +10,15 @@ const USER_AGENT: &str = "Crane/0.1.0";
 pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
     let parsed = url::Url::parse(input_url)?;
     match parsed.scheme() {
-        "http" | "https" => {}
-        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
+        "http" | "https" => analyze_http(input_url, &parsed).await,
+        _ => {
+            let handler = crate::protocol::handler_for_url(input_url)?;
+            handler.analyze(input_url).await
+        }
     }
+}
 
+async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis, CraneError> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
@@ -356,10 +361,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_unsupported_scheme() {
-        let result = analyze_url("ftp://example.com/file.txt").await;
+        let result = analyze_url("gopher://example.com/file.txt").await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            CraneError::UnsupportedScheme(scheme) => assert_eq!(scheme, "ftp"),
+            CraneError::UnsupportedScheme(scheme) => assert_eq!(scheme, "gopher"),
             other => panic!("Expected UnsupportedScheme, got: {other:?}"),
         }
     }
