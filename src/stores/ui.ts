@@ -57,3 +57,7 @@ export function clearSelection() {
 export function selectAll(ids: string[]) {
   setSelectedIds(new Set(ids));
 }
+
+// Visible download IDs (set by DownloadList, read by useKeyboard for Cmd+A)
+const [visibleDownloadIds, setVisibleDownloadIds] = createSignal<string[]>([]);
+export { visibleDownloadIds, setVisibleDownloadIds };

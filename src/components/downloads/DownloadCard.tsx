@@ -185,7 +185,7 @@ export default function DownloadCard(props: Props) {
 
   return (
     <div
-      class={`p-4 rounded-xl border cursor-pointer transition-all group animate-slide-in flex flex-col gap-3 ${
+      class={`p-5 rounded-2xl border cursor-pointer transition-all group animate-slide-in flex flex-col gap-3 ${
         isSelected()
           ? "bg-active/10 border-active/30"
           : "bg-surface border-border hover:bg-surface-hover hover:border-border"
@@ -194,7 +194,7 @@ export default function DownloadCard(props: Props) {
     >
       {/* Icon badge */}
       <div
-        class={`w-9 h-9 rounded-lg flex items-center justify-center ${badge().bg} ${
+        class={`w-10 h-10 rounded-xl flex items-center justify-center ${badge().bg} ${
           isActive() ? "ring-1 ring-active/30" : ""
         }`}
       >
@@ -305,7 +305,7 @@ export default function DownloadCard(props: Props) {
               <Tooltip.Trigger
                 as="button"
                 onClick={handlePause}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
               >
                 <PauseIcon size={15} stroke-width={1.75} />
               </Tooltip.Trigger>
@@ -322,7 +322,7 @@ export default function DownloadCard(props: Props) {
               <Tooltip.Trigger
                 as="button"
                 onClick={handleResume}
-                class="p-1.5 rounded-md text-text-secondary hover:text-active hover:bg-active/10 transition-all"
+                class="p-1.5 rounded-lg text-text-secondary hover:text-active hover:bg-active/10 transition-all"
               >
                 <Play size={15} stroke-width={1.75} />
               </Tooltip.Trigger>
@@ -338,7 +338,7 @@ export default function DownloadCard(props: Props) {
             <Tooltip.Trigger
               as="button"
               onClick={handleRetry}
-              class="p-1.5 rounded-md text-error hover:bg-error/10 transition-all"
+              class="p-1.5 rounded-lg text-error hover:bg-error/10 transition-all"
             >
               <RotateCcw size={15} stroke-width={1.75} />
             </Tooltip.Trigger>
@@ -354,7 +354,7 @@ export default function DownloadCard(props: Props) {
               <Tooltip.Trigger
                 as="button"
                 onClick={handleOpenFile}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
               >
                 <ExternalLink size={15} stroke-width={1.75} />
               </Tooltip.Trigger>
@@ -366,7 +366,7 @@ export default function DownloadCard(props: Props) {
               <Tooltip.Trigger
                 as="button"
                 onClick={handleOpenFolder}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
               >
                 <FolderOpen size={15} stroke-width={1.75} />
               </Tooltip.Trigger>
@@ -378,7 +378,7 @@ export default function DownloadCard(props: Props) {
               <Tooltip.Trigger
                 as="button"
                 onClick={handleRedownload}
-                class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+                class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
               >
                 <RefreshCw size={15} stroke-width={1.75} />
               </Tooltip.Trigger>

@@ -57,36 +57,36 @@ export default function FloatingActionBar(props: Props) {
 
   return (
     <Show when={count() > 0}>
-      <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 bg-surface/90 backdrop-blur-sm border border-border rounded-lg shadow-lg animate-fade-in">
-        <span class="text-sm text-text-secondary tabular-nums">
+      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-surface/90 backdrop-blur-md border border-border rounded-2xl shadow-lg animate-fade-in">
+        <span class="text-sm text-text-secondary tabular-nums font-medium">
           {count()} selected
         </span>
-        <div class="w-px h-4 bg-border" />
+        <div class="w-px h-5 bg-border" />
         <button
           onClick={handlePauseSelected}
-          class="flex items-center gap-1.5 px-3 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-lg transition-colors"
         >
           <Pause size={14} stroke-width={1.75} />
           Pause
         </button>
         <button
           onClick={handleResumeSelected}
-          class="flex items-center gap-1.5 px-3 py-1 text-xs bg-border hover:bg-surface-hover text-text-primary rounded transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-lg transition-colors"
         >
           <Play size={14} stroke-width={1.75} />
           Resume
         </button>
         <button
           onClick={handleDeleteSelected}
-          class="flex items-center gap-1.5 px-3 py-1 text-xs bg-error/20 hover:bg-error/30 text-error rounded transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-error/20 hover:bg-error/30 text-error rounded-lg transition-colors"
         >
           <Trash2 size={14} stroke-width={1.75} />
           Delete
         </button>
-        <div class="w-px h-4 bg-border" />
+        <div class="w-px h-5 bg-border" />
         <button
           onClick={clearSelection}
-          class="flex items-center gap-1.5 px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
         >
           <XCircle size={14} stroke-width={1.75} />
           Clear

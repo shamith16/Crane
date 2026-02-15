@@ -5,6 +5,8 @@ import {
   toggleSidebar,
   selectedDownloadId, closeDetailPanel,
   clearSelection,
+  selectAll,
+  visibleDownloadIds,
 } from "../stores/ui";
 import { pauseAll, resumeAll } from "../lib/commands";
 
@@ -32,6 +34,13 @@ export function useKeyboard() {
     if (meta && key === ",") {
       e.preventDefault();
       setSettingsOpen(!settingsOpen());
+      return;
+    }
+
+    // ⌘A — Select all visible downloads
+    if (meta && key === "a") {
+      e.preventDefault();
+      selectAll(visibleDownloadIds());
       return;
     }
 

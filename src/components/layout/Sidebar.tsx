@@ -25,8 +25,6 @@ import {
   Archive,
   Box,
   File,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-solid";
 
 interface Props {
@@ -77,82 +75,84 @@ export default function Sidebar(props: Props) {
   return (
     <div
       class={`flex-shrink-0 bg-bg border-r border-border flex flex-col transition-all duration-200 overflow-hidden ${
-        collapsed() ? "w-12" : "w-52"
+        collapsed() ? "w-14 cursor-pointer" : "w-52"
       }`}
+      onClick={collapsed() ? toggleSidebar : undefined}
     >
-      {/* Collapse toggle */}
-      <button
-        onClick={toggleSidebar}
-        class="flex items-center justify-center h-8 mt-1 mx-1 rounded hover:bg-surface-hover text-text-muted transition-colors"
-        title={collapsed() ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed() ? <ChevronRight size={16} stroke-width={1.75} /> : <ChevronLeft size={16} stroke-width={1.75} />}
-      </button>
-
       {/* Status filters */}
-      <div class="mt-2">
+      <div class="mt-3 px-2">
         <Show when={!collapsed()}>
-          <p class="px-3 mb-1 text-[10px] uppercase tracking-wider text-text-muted font-medium">
+          <p class="px-2 mb-2 text-[10px] uppercase tracking-widest text-text-muted font-semibold">
             Status
           </p>
         </Show>
-        <For each={STATUS_FILTERS}>
-          {(filter) => {
-            const count = () => statusCounts()[filter.key] || 0;
-            const active = () => statusFilter() === filter.key;
+        <div class="space-y-0.5">
+          <For each={STATUS_FILTERS}>
+            {(filter) => {
+              const count = () => statusCounts()[filter.key] || 0;
+              const active = () => statusFilter() === filter.key;
 
-            return (
-              <button
-                onClick={() => setStatusFilter(filter.key)}
-                class={`flex items-center w-full px-3 py-1.5 text-xs transition-colors ${
-                  active()
-                    ? "bg-active/10 text-active font-medium border-l-2 border-l-active"
-                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary border-l-2 border-l-transparent"
-                } ${collapsed() ? "justify-center" : "gap-2.5"}`}
-                title={collapsed() ? `${filter.label} (${count()})` : undefined}
-              >
-                <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
-                <Show when={!collapsed()}>
-                  <span class="flex-1 text-left truncate">{filter.label}</span>
-                  <span class="text-text-muted tabular-nums">{count()}</span>
-                </Show>
-              </button>
-            );
-          }}
-        </For>
+              return (
+                <button
+                  onClick={(e) => {
+                    if (collapsed()) { e.stopPropagation(); toggleSidebar(); }
+                    setStatusFilter(filter.key);
+                  }}
+                  class={`flex items-center w-full rounded-lg text-xs transition-colors ${
+                    active()
+                      ? "bg-active/10 text-active font-medium"
+                      : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                  } ${collapsed() ? "justify-center p-2.5" : "gap-2.5 px-2.5 py-2"}`}
+                  title={collapsed() ? `${filter.label} (${count()})` : undefined}
+                >
+                  <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
+                  <Show when={!collapsed()}>
+                    <span class="flex-1 text-left truncate">{filter.label}</span>
+                    <span class="text-text-muted tabular-nums text-[11px]">{count()}</span>
+                  </Show>
+                </button>
+              );
+            }}
+          </For>
+        </div>
       </div>
 
       {/* Category filters */}
-      <div class="mt-4">
+      <div class="mt-5 px-2">
         <Show when={!collapsed()}>
-          <p class="px-3 mb-1 text-[10px] uppercase tracking-wider text-text-muted font-medium">
+          <p class="px-2 mb-2 text-[10px] uppercase tracking-widest text-text-muted font-semibold">
             Category
           </p>
         </Show>
-        <For each={CATEGORY_FILTERS}>
-          {(filter) => {
-            const count = () => categoryCounts()[filter.key] || 0;
-            const active = () => categoryFilter() === filter.key;
+        <div class="space-y-0.5">
+          <For each={CATEGORY_FILTERS}>
+            {(filter) => {
+              const count = () => categoryCounts()[filter.key] || 0;
+              const active = () => categoryFilter() === filter.key;
 
-            return (
-              <button
-                onClick={() => setCategoryFilter(filter.key)}
-                class={`flex items-center w-full px-3 py-1.5 text-xs transition-colors ${
-                  active()
-                    ? "bg-active/10 text-active font-medium border-l-2 border-l-active"
-                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary border-l-2 border-l-transparent"
-                } ${collapsed() ? "justify-center" : "gap-2.5"}`}
-                title={collapsed() ? `${filter.label} (${count()})` : undefined}
-              >
-                <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
-                <Show when={!collapsed()}>
-                  <span class="flex-1 text-left truncate">{filter.label}</span>
-                  <span class="text-text-muted tabular-nums">{count()}</span>
-                </Show>
-              </button>
-            );
-          }}
-        </For>
+              return (
+                <button
+                  onClick={(e) => {
+                    if (collapsed()) { e.stopPropagation(); toggleSidebar(); }
+                    setCategoryFilter(filter.key);
+                  }}
+                  class={`flex items-center w-full rounded-lg text-xs transition-colors ${
+                    active()
+                      ? "bg-active/10 text-active font-medium"
+                      : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                  } ${collapsed() ? "justify-center p-2.5" : "gap-2.5 px-2.5 py-2"}`}
+                  title={collapsed() ? `${filter.label} (${count()})` : undefined}
+                >
+                  <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
+                  <Show when={!collapsed()}>
+                    <span class="flex-1 text-left truncate">{filter.label}</span>
+                    <span class="text-text-muted tabular-nums text-[11px]">{count()}</span>
+                  </Show>
+                </button>
+              );
+            }}
+          </For>
+        </div>
       </div>
     </div>
   );

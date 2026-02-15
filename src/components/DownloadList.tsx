@@ -2,7 +2,8 @@ import { For, Show, createSignal, createMemo, createEffect, onMount, onCleanup }
 import { createStore, reconcile } from "solid-js/store";
 import { getDownloads, subscribeProgress } from "../lib/commands";
 import type { Download, DownloadProgress } from "../lib/types";
-import { statusFilter, categoryFilter } from "../stores/ui";
+import { statusFilter, categoryFilter, setVisibleDownloadIds } from "../stores/ui";
+import { ChevronDown, ChevronRight } from "lucide-solid";
 import DownloadCard from "./downloads/DownloadCard";
 import FloatingActionBar from "./shared/FloatingActionBar";
 
@@ -160,6 +161,11 @@ export default function DownloadList(props: Props) {
     return ids;
   });
 
+  // Sync visible IDs to store for Cmd+A
+  createEffect(() => {
+    setVisibleDownloadIds(visibleIds());
+  });
+
   // ─── Group collapse ───────────────────────────
 
   function toggleGroupCollapse(key: string) {
@@ -187,7 +193,7 @@ export default function DownloadList(props: Props) {
           </div>
         }
       >
-        <div class="p-4 space-y-4">
+        <div class="p-5 space-y-5">
           <For each={groups()}>
             {(group) => {
               const isCollapsed = () => collapsedGroups().has(group.key);
@@ -198,32 +204,26 @@ export default function DownloadList(props: Props) {
                   <Show
                     when={group.collapsible}
                     fallback={
-                      <div class="flex items-center gap-2 w-full py-2 text-xs font-medium text-text-muted select-none">
-                        <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
+                      <div class="flex items-center gap-1.5 w-full py-2 text-xs font-semibold text-text-muted select-none">
+                        <span class="uppercase tracking-widest text-[10px]">{group.label}</span>
                       </div>
                     }
                   >
                     <button
-                      class="flex items-center gap-2 w-full py-2 text-xs font-medium text-text-muted hover:text-text-secondary transition-colors select-none"
+                      class="flex items-center gap-1 w-full py-2 text-xs font-semibold text-text-muted hover:text-text-secondary transition-colors select-none"
                       onClick={() => toggleGroupCollapse(group.key)}
                       aria-expanded={!isCollapsed()}
                     >
-                      <span
-                        class="transition-transform duration-150"
-                        style={{
-                          display: "inline-block",
-                          transform: isCollapsed() ? "rotate(-90deg)" : "rotate(0deg)",
-                        }}
-                      >
-                        &#9662;
-                      </span>
-                      <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
+                      {isCollapsed()
+                        ? <ChevronRight size={14} stroke-width={2} />
+                        : <ChevronDown size={14} stroke-width={2} />}
+                      <span class="uppercase tracking-widest text-[10px]">{group.label}</span>
                     </button>
                   </Show>
 
                   {/* Group items — card grid */}
                   <Show when={!isCollapsed()}>
-                    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3.5">
                       <For each={group.downloads}>
                         {(dl) => (
                           <DownloadCard
