@@ -3,6 +3,8 @@ import { Pause, Play, Trash2, XCircle } from "lucide-solid";
 import {
   selectedIds,
   clearSelection,
+  selectedDownloadId,
+  closeDetailPanel,
 } from "../../stores/ui";
 import {
   pauseDownload,
@@ -43,6 +45,11 @@ export default function FloatingActionBar(props: Props) {
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
       console.error(`${failures.length} delete(s) failed:`, failures);
+    }
+    // Close detail panel if the viewed download was among those deleted
+    const viewedId = selectedDownloadId();
+    if (viewedId && ids.includes(viewedId)) {
+      closeDetailPanel();
     }
     clearSelection();
     props.onRefresh();

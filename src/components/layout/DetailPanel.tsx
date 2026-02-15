@@ -505,7 +505,7 @@ export default function DetailPanel() {
     const interval = setInterval(() => {
       getDownload(id)
         .then((dl) => setDownload(dl))
-        .catch(() => {});
+        .catch(() => closeDetailPanel());
     }, 2000);
 
     onCleanup(() => clearInterval(interval));
