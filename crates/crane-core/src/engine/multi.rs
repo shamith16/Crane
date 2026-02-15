@@ -313,13 +313,28 @@ where
         let on_progress = inner.on_progress.clone();
         let inner2 = inner.clone();
         let handler_clone = handler.clone();
+
+        // Check for existing temp file to support resume
+        let resume_from = {
+            let tmp_path = save_path.with_extension(
+                save_path
+                    .extension()
+                    .map(|e| format!("{}.cranedownload", e.to_string_lossy()))
+                    .unwrap_or_else(|| "cranedownload".to_string()),
+            );
+            tokio::fs::metadata(&tmp_path)
+                .await
+                .map(|m| m.len())
+                .unwrap_or(0)
+        };
+
         tokio::spawn(async move {
             let result = handler_clone
                 .download(
                     &url_owned,
                     &save_path_owned,
                     &options_owned,
-                    0,
+                    resume_from,
                     cancel_token,
                     on_progress,
                 )
