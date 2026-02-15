@@ -194,12 +194,7 @@ pub(crate) async fn download_file_with_token<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync,
 {
-    // Validate URL scheme
     let parsed = Url::parse(url)?;
-    match parsed.scheme() {
-        "http" | "https" => {}
-        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
-    }
 
     let ua = options
         .user_agent
@@ -657,28 +652,6 @@ mod tests {
         .await;
 
         assert!(err.is_err(), "invalid URL should return an error");
-    }
-
-    #[tokio::test]
-    async fn test_unsupported_scheme() {
-        let tmp = TempDir::new().unwrap();
-        let save = tmp.path().join("ftp.txt");
-
-        let err = download_file(
-            "ftp://example.com/file.txt",
-            &save,
-            &DownloadOptions::default(),
-            noop_progress,
-        )
-        .await
-        .unwrap_err();
-
-        match err {
-            CraneError::UnsupportedScheme(scheme) => {
-                assert_eq!(scheme, "ftp");
-            }
-            other => panic!("expected CraneError::UnsupportedScheme, got: {other:?}"),
-        }
     }
 
     #[tokio::test]
