@@ -266,6 +266,9 @@ pub enum CraneError {
     #[error("Request to private/internal network blocked: {0}")]
     PrivateNetwork(String),
 
+    #[error("FTP error: {0}")]
+    Ftp(String),
+
     #[error("Database error: {0}")]
     Database(String),
 }
