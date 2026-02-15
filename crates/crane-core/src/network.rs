@@ -110,7 +110,7 @@ fn is_public_ipv6(ip: Ipv6Addr) -> bool {
 /// Returns `Ok(())` if safe, `Err` with a descriptive error otherwise.
 pub fn validate_url_safe(url: &url::Url) -> Result<(), CraneError> {
     match url.scheme() {
-        "http" | "https" => {}
+        "http" | "https" | "ftp" | "ftps" => {}
         scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
     }
 
@@ -242,7 +242,13 @@ mod tests {
         assert!(validate_url_safe(&private).is_err());
 
         let ftp = url::Url::parse("ftp://example.com/file.txt").unwrap();
-        assert!(validate_url_safe(&ftp).is_err());
+        assert!(validate_url_safe(&ftp).is_ok());
+
+        let ftps = url::Url::parse("ftps://example.com/file.txt").unwrap();
+        assert!(validate_url_safe(&ftps).is_ok());
+
+        let gopher = url::Url::parse("gopher://example.com/file.txt").unwrap();
+        assert!(validate_url_safe(&gopher).is_err());
 
         let metadata = url::Url::parse("http://169.254.169.254/latest/meta-data/").unwrap();
         assert!(validate_url_safe(&metadata).is_err());
