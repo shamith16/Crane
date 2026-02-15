@@ -9,8 +9,6 @@ use futures_util::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
-use url::Url;
-
 use crc32fast::Hasher as Crc32Hasher;
 
 use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
@@ -256,21 +254,18 @@ pub async fn start_download<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
 {
-    // Validate URL scheme
-    let parsed = Url::parse(url)?;
-    match parsed.scheme() {
-        "http" | "https" => {}
-        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
-    }
-
-    // Analyze URL to determine resumability and size
-    let analysis = analyze_url(url).await?;
+    // Dispatch to protocol-specific handler
+    let handler: Arc<dyn crate::protocol::ProtocolHandler> =
+        Arc::from(crate::protocol::handler_for_url(url)?);
+    let analysis = handler.analyze(url).await?;
 
     let requested_connections = options.connections.unwrap_or(DEFAULT_CONNECTIONS);
     let cancel_token = CancellationToken::new();
 
-    let multi_eligible =
-        analysis.resumable && analysis.total_size.is_some() && requested_connections > 1;
+    let multi_eligible = handler.supports_multi_connection()
+        && analysis.resumable
+        && analysis.total_size.is_some()
+        && requested_connections > 1;
 
     let total_size = analysis.total_size.unwrap_or(0);
     let chunks = if multi_eligible {
@@ -306,8 +301,35 @@ where
     let inner = controller.clone();
     let join_handle = if multi_eligible {
         tokio::spawn(async move { run_multi_download(&inner).await })
-    } else {
+    } else if handler.supports_multi_connection() {
+        // HTTP single-connection (server doesn't support ranges or size unknown)
         tokio::spawn(async move { run_single_download(&inner).await })
+    } else {
+        // Non-HTTP protocol (FTP, etc.) — delegate to protocol handler
+        let url_owned = url.to_string();
+        let save_path_owned = save_path.to_path_buf();
+        let options_owned = options.clone();
+        let cancel_token = { inner.cancel_token.lock().await.clone() };
+        let on_progress = inner.on_progress.clone();
+        let inner2 = inner.clone();
+        let handler_clone = handler.clone();
+        tokio::spawn(async move {
+            let result = handler_clone
+                .download(
+                    &url_owned,
+                    &save_path_owned,
+                    &options_owned,
+                    0,
+                    cancel_token,
+                    on_progress,
+                )
+                .await;
+            if let Err(ref e) = result {
+                *inner2.error_message.lock().unwrap() = Some(e.to_string());
+            }
+            inner2.finished.store(true, std::sync::atomic::Ordering::SeqCst);
+            result
+        })
     };
 
     Ok(DownloadHandle {
@@ -1000,15 +1022,9 @@ pub async fn download<F>(
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
 {
-    // Validate URL scheme
-    let parsed = Url::parse(url)?;
-    match parsed.scheme() {
-        "http" | "https" => {}
-        scheme => return Err(CraneError::UnsupportedScheme(scheme.to_string())),
-    }
-
-    // Analyze URL to determine resumability and size
-    let analysis = analyze_url(url).await?;
+    // Dispatch to protocol-specific handler
+    let handler = crate::protocol::handler_for_url(url)?;
+    let analysis = handler.analyze(url).await?;
 
     let requested_connections = options.connections.unwrap_or(DEFAULT_CONNECTIONS);
 
@@ -1017,18 +1033,30 @@ where
     let cancel_token = CancellationToken::new();
 
     // Check if multi-connection is eligible
-    let multi_eligible =
-        analysis.resumable && analysis.total_size.is_some() && requested_connections > 1;
+    let multi_eligible = handler.supports_multi_connection()
+        && analysis.resumable
+        && analysis.total_size.is_some()
+        && requested_connections > 1;
 
     if !multi_eligible {
-        return super::download::download_file_with_token(
-            url,
-            save_path,
-            options,
-            on_progress,
-            cancel_token,
-        )
-        .await;
+        if handler.supports_multi_connection() {
+            // HTTP single-connection fallback
+            return super::download::download_file_with_token(
+                url,
+                save_path,
+                options,
+                on_progress,
+                cancel_token,
+            )
+            .await;
+        } else {
+            // Non-HTTP protocol (FTP, etc.) — delegate to protocol handler
+            let on_progress_arc: Arc<dyn Fn(&DownloadProgress) + Send + Sync> =
+                Arc::new(on_progress);
+            return handler
+                .download(url, save_path, options, 0, cancel_token, on_progress_arc)
+                .await;
+        }
     }
 
     let total_size = analysis.total_size.unwrap();
