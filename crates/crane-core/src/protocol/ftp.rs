@@ -91,6 +91,133 @@ pub fn parse_ftp_url(url: &str) -> Result<FtpUrlParts, CraneError> {
     })
 }
 
+/// Shared streaming download body for FTP connections.
+///
+/// Both `AsyncFtpStream` and `AsyncRustlsFtpStream` are type aliases for
+/// `ImplAsyncFtpStream<T>` with different `T`, and the `AsyncTlsStream` trait
+/// bound is not publicly exported from suppaftp. We use a macro to avoid
+/// duplicating the read loop across the FTP and FTPS code paths.
+///
+/// This macro expects `$ftp` to already be connected, logged in, and in
+/// binary mode. It handles resume, streaming, progress, finalize, and rename.
+macro_rules! ftp_download_stream {
+    ($ftp:ident, $parts:expr, $save_path:expr, $resume_from:expr,
+     $cancel_token:expr, $on_progress:expr) => {{
+        use futures_util::io::AsyncReadExt;
+        use tokio::io::AsyncWriteExt;
+
+        let start_time = std::time::Instant::now();
+        let total_size = $ftp.size(&$parts.path).await.ok().map(|s| s as u64);
+
+        // Resume from offset if requested
+        let mut downloaded: u64 = $resume_from;
+        if $resume_from > 0 {
+            $ftp.resume_transfer($resume_from as usize)
+                .await
+                .map_err(|e| CraneError::Ftp(format!("REST failed: {e}")))?;
+        }
+
+        // Open temp file (.cranedownload)
+        let tmp_path = $save_path.with_extension(
+            $save_path
+                .extension()
+                .map(|e| format!("{}.cranedownload", e.to_string_lossy()))
+                .unwrap_or_else(|| "cranedownload".to_string()),
+        );
+
+        if let Some(parent) = tmp_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
+        let mut file = if $resume_from > 0 {
+            tokio::fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(&tmp_path)
+                .await?
+        } else {
+            tokio::fs::File::create(&tmp_path).await?
+        };
+
+        // RETR and stream bytes
+        let mut reader = $ftp
+            .retr_as_stream(&$parts.path)
+            .await
+            .map_err(|e| CraneError::Ftp(format!("RETR failed: {e}")))?;
+
+        let mut buf = vec![0u8; 65536]; // 64KB buffer
+        loop {
+            if $cancel_token.is_cancelled() {
+                drop(reader);
+                let _ = $ftp.quit().await;
+                return Err(CraneError::Ftp("Download cancelled".to_string()));
+            }
+
+            let n = reader
+                .read(&mut buf)
+                .await
+                .map_err(|e| CraneError::Ftp(format!("read error: {e}")))?;
+
+            if n == 0 {
+                break;
+            }
+
+            file.write_all(&buf[..n]).await?;
+            downloaded += n as u64;
+
+            // Report progress
+            let elapsed_secs = start_time.elapsed().as_secs_f64();
+            let speed = if elapsed_secs > 0.0 {
+                (downloaded - $resume_from) as f64 / elapsed_secs
+            } else {
+                0.0
+            };
+
+            let eta = if speed > 0.0 {
+                total_size.map(|total| {
+                    let remaining = total.saturating_sub(downloaded);
+                    (remaining as f64 / speed) as u64
+                })
+            } else {
+                None
+            };
+
+            {
+                let progress = DownloadProgress {
+                    download_id: String::new(), // Filled by caller
+                    downloaded_size: downloaded,
+                    total_size,
+                    speed,
+                    eta_seconds: eta,
+                    connections: vec![],
+                };
+                $on_progress(&progress);
+            }
+        }
+
+        file.flush().await?;
+
+        // Finalize RETR: drop reader (closes data connection), then read
+        // the server's transfer-complete response on the control connection.
+        $ftp.finalize_retr_stream(reader)
+            .await
+            .map_err(|e| CraneError::Ftp(format!("finalize RETR failed: {e}")))?;
+
+        let _ = $ftp.quit().await;
+
+        // Rename temp file to final path
+        tokio::fs::rename(&tmp_path, $save_path).await?;
+
+        Ok(DownloadResult {
+            downloaded_bytes: downloaded,
+            elapsed_ms: start_time.elapsed().as_millis() as u64,
+            final_path: $save_path.to_path_buf(),
+            hash_verified: None,
+        })
+    }};
+}
+
+
 pub struct FtpHandler;
 
 #[async_trait]
@@ -128,14 +255,110 @@ impl ProtocolHandler for FtpHandler {
 
     async fn download(
         &self,
-        _url: &str,
-        _save_path: &Path,
+        url: &str,
+        save_path: &Path,
         _options: &DownloadOptions,
-        _resume_from: u64,
-        _cancel_token: CancellationToken,
-        _on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync>,
+        resume_from: u64,
+        cancel_token: CancellationToken,
+        on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync>,
     ) -> Result<DownloadResult, CraneError> {
-        todo!("FTP download not yet implemented")
+        use suppaftp::types::FileType;
+
+        // SAFETY: async_trait desugars `Arc<dyn Fn(&DownloadProgress)>` losing the
+        // higher-ranked `for<'a>` bound, making it impossible to call with local refs.
+        // The Arc is 'static and the original closure had `for<'a>` — restoring it is sound.
+        let on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync> =
+            unsafe { std::mem::transmute(on_progress) };
+
+        let parts = parse_ftp_url(url)?;
+
+        if !is_public_host(&parts.host) {
+            return Err(CraneError::PrivateNetwork(parts.host.clone()));
+        }
+
+        let addr = format!("{}:{}", parts.host, parts.port);
+        let backoff_delays = [1u64, 2, 4]; // seconds
+        let max_attempts = backoff_delays.len() + 1; // 4 total: 1 initial + 3 retries
+
+        let mut last_error = None;
+        for attempt in 0..max_attempts {
+            if cancel_token.is_cancelled() {
+                return Err(CraneError::Ftp("Download cancelled".to_string()));
+            }
+
+            // Exponential backoff before retries (not before first attempt)
+            if attempt > 0 {
+                let delay = backoff_delays[attempt - 1];
+                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+            }
+
+            // Inline the download attempt. We use the ftp_download_stream!
+            // macro for the shared read loop, but connect+login differs per
+            // protocol and must be inlined here (not in a helper fn) because
+            // async_trait loses the higher-ranked lifetime on `on_progress`.
+            let result: Result<DownloadResult, CraneError> = if parts.use_tls {
+                use suppaftp::{AsyncRustlsConnector, AsyncRustlsFtpStream};
+
+                let connect_result = async {
+                    let ftp_stream = AsyncRustlsFtpStream::connect(&addr)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("connection failed: {e}")))?;
+                    let connector = build_rustls_connector()
+                        .map_err(|e| CraneError::Ftp(format!("TLS setup failed: {e}")))?;
+                    let mut ftp = ftp_stream
+                        .into_secure(AsyncRustlsConnector::from(connector), &parts.host)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("TLS upgrade failed: {e}")))?;
+                    ftp.login(&parts.username, &parts.password)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("login failed: {e}")))?;
+                    ftp.transfer_type(FileType::Binary)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("failed to set binary mode: {e}")))?;
+                    Ok::<_, CraneError>(ftp)
+                }
+                .await;
+
+                match connect_result {
+                    Ok(mut ftp) => {
+                        ftp_download_stream!(ftp, parts, save_path, resume_from, cancel_token, on_progress)
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                use suppaftp::AsyncFtpStream;
+
+                let connect_result = async {
+                    let mut ftp = AsyncFtpStream::connect(&addr)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("connection failed: {e}")))?;
+                    ftp.login(&parts.username, &parts.password)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("login failed: {e}")))?;
+                    ftp.transfer_type(FileType::Binary)
+                        .await
+                        .map_err(|e| CraneError::Ftp(format!("failed to set binary mode: {e}")))?;
+                    Ok::<_, CraneError>(ftp)
+                }
+                .await;
+
+                match connect_result {
+                    Ok(mut ftp) => {
+                        ftp_download_stream!(ftp, parts, save_path, resume_from, cancel_token, on_progress)
+                    }
+                    Err(e) => Err(e),
+                }
+            };
+
+            match result {
+                Ok(r) => return Ok(r),
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| CraneError::Ftp("Download failed".to_string())))
     }
 
     fn supports_multi_connection(&self) -> bool {
