@@ -31,17 +31,19 @@ pub async fn calculate_hash(
     id: String,
     algorithm: String,
 ) -> Result<String, String> {
-    let dl = state
-        .queue
-        .db()
-        .get_download(&id)
-        .map_err(|e| e.to_string())?;
     let algo = match algorithm.as_str() {
         "sha256" => HashAlgorithm::Sha256,
         "md5" => HashAlgorithm::Md5,
         _ => return Err(format!("Unsupported algorithm: {algorithm}")),
     };
-    hash::compute_hash(std::path::Path::new(&dl.save_path), algo)
+    // Extract save_path before any .await to avoid holding State borrow across await
+    let save_path = state
+        .queue
+        .db()
+        .get_download(&id)
+        .map_err(|e| e.to_string())?
+        .save_path;
+    hash::compute_hash(std::path::Path::new(&save_path), algo)
         .await
         .map_err(|e| e.to_string())
 }
