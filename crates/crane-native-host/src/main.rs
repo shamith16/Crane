@@ -159,13 +159,13 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
         }
     };
 
-    // Only allow http/https URLs
+    // Only allow http/https/ftp/ftps URLs
     match parsed_url.scheme() {
-        "http" | "https" => {}
+        "http" | "https" | "ftp" | "ftps" => {}
         scheme => {
             return serde_json::json!({
                 "type": "error",
-                "message": format!("Unsupported URL scheme: '{scheme}'. Only http and https are allowed.")
+                "message": format!("Unsupported URL scheme: '{scheme}'. Only http, https, ftp, and ftps are allowed.")
             });
         }
     }
@@ -488,11 +488,23 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_download_rejects_ftp() {
+    fn test_handle_download_accepts_ftp() {
         let db = Database::open_in_memory().unwrap();
         let msg = serde_json::json!({
             "type": "download",
             "url": "ftp://example.com/file.txt"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+        assert_eq!(response["type"], "accepted");
+    }
+
+    #[test]
+    fn test_handle_download_rejects_gopher() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "gopher://example.com/file.txt"
         });
 
         let response = handle_message(&msg, &db, "/downloads");
