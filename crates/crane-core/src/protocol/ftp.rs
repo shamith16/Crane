@@ -515,4 +515,55 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(err.contains("unsupported scheme"));
     }
+
+    #[tokio::test]
+    async fn test_analyze_rejects_private_host() {
+        let handler = FtpHandler;
+        let result = handler.analyze("ftp://192.168.1.1/file.txt").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CraneError::PrivateNetwork(_)));
+    }
+
+    #[tokio::test]
+    async fn test_download_rejects_private_host() {
+        let handler = FtpHandler;
+        let result = handler
+            .download(
+                "ftp://10.0.0.1/file.txt",
+                Path::new("/tmp/test.txt"),
+                &DownloadOptions::default(),
+                0,
+                CancellationToken::new(),
+                Arc::new(|_| {}),
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CraneError::PrivateNetwork(_)));
+    }
+
+    #[test]
+    fn test_handler_for_url_ftp() {
+        let handler = crate::protocol::handler_for_url("ftp://example.com/file.txt");
+        assert!(handler.is_ok());
+        assert!(!handler.unwrap().supports_multi_connection());
+    }
+
+    #[test]
+    fn test_handler_for_url_ftps() {
+        let handler = crate::protocol::handler_for_url("ftps://example.com/file.txt");
+        assert!(handler.is_ok());
+    }
+
+    #[test]
+    fn test_handler_for_url_http() {
+        let handler = crate::protocol::handler_for_url("http://example.com/file.txt");
+        assert!(handler.is_ok());
+        assert!(handler.unwrap().supports_multi_connection());
+    }
+
+    #[test]
+    fn test_handler_for_url_unsupported() {
+        let handler = crate::protocol::handler_for_url("gopher://example.com/file.txt");
+        assert!(handler.is_err());
+    }
 }
