@@ -187,7 +187,7 @@ export default function DownloadList(props: Props) {
           </div>
         }
       >
-        <div class="divide-y divide-surface">
+        <div class="p-4 space-y-4">
           <For each={groups()}>
             {(group) => {
               const isCollapsed = () => collapsedGroups().has(group.key);
@@ -198,13 +198,13 @@ export default function DownloadList(props: Props) {
                   <Show
                     when={group.collapsible}
                     fallback={
-                      <div class="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-muted select-none">
+                      <div class="flex items-center gap-2 w-full py-2 text-xs font-medium text-text-muted select-none">
                         <span class="uppercase tracking-wider text-[10px]">{group.label}</span>
                       </div>
                     }
                   >
                     <button
-                      class="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors select-none"
+                      class="flex items-center gap-2 w-full py-2 text-xs font-medium text-text-muted hover:text-text-secondary transition-colors select-none"
                       onClick={() => toggleGroupCollapse(group.key)}
                       aria-expanded={!isCollapsed()}
                     >
@@ -221,18 +221,20 @@ export default function DownloadList(props: Props) {
                     </button>
                   </Show>
 
-                  {/* Group items */}
+                  {/* Group items — card grid */}
                   <Show when={!isCollapsed()}>
-                    <For each={group.downloads}>
-                      {(dl) => (
-                        <DownloadCard
-                          download={dl}
-                          progress={progressMap()[dl.id]}
-                          onRefresh={refresh}
-                          visibleIds={visibleIds()}
-                        />
-                      )}
-                    </For>
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+                      <For each={group.downloads}>
+                        {(dl) => (
+                          <DownloadCard
+                            download={dl}
+                            progress={progressMap()[dl.id]}
+                            onRefresh={refresh}
+                            visibleIds={visibleIds()}
+                          />
+                        )}
+                      </For>
+                    </div>
                   </Show>
                 </div>
               );
