@@ -87,7 +87,7 @@ async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis,
         .map(|v| v.to_string());
 
     let raw_filename = extract_filename_from_headers(headers)
-        .unwrap_or_else(|| extract_filename_from_url(&parsed));
+        .unwrap_or_else(|| extract_filename_from_url(parsed));
     let filename = sanitize_filename(&raw_filename);
 
     let category = match &mime_type {

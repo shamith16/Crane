@@ -6,6 +6,7 @@ import {
   selectedIds,
   setSelectedIds,
   toggleSelection,
+  clearSelection,
   setSelectedDownloadId,
 } from "../../stores/ui";
 import {
@@ -113,7 +114,8 @@ export default function DownloadCard(props: Props) {
       handleShiftClick(e);
       return;
     }
-    toggleSelection(dl().id, e);
+    // Plain click: open detail panel only, don't add to multi-select
+    clearSelection();
     setSelectedDownloadId(dl().id);
   }
 

@@ -41,6 +41,8 @@ struct DownloadController {
     last_polled_bytes: AtomicU64,
     /// Previous poll timestamp for speed calculation in `progress()`.
     last_polled_time: std::sync::Mutex<Instant>,
+    /// EMA-smoothed speed to avoid jittery display.
+    smoothed_speed: std::sync::Mutex<f64>,
 }
 
 /// Handle returned by [`start_download`] that allows pausing, resuming, and
@@ -197,9 +199,18 @@ impl DownloadHandle {
         };
 
         let speed = if elapsed.as_secs_f64() > 0.05 {
-            total_downloaded.saturating_sub(prev_bytes) as f64 / elapsed.as_secs_f64()
+            let instant_speed =
+                total_downloaded.saturating_sub(prev_bytes) as f64 / elapsed.as_secs_f64();
+            let mut smoothed = self.inner.smoothed_speed.lock().unwrap();
+            const ALPHA: f64 = 0.3;
+            *smoothed = if *smoothed > 0.0 {
+                ALPHA * instant_speed + (1.0 - ALPHA) * *smoothed
+            } else {
+                instant_speed
+            };
+            *smoothed
         } else {
-            0.0
+            *self.inner.smoothed_speed.lock().unwrap()
         };
 
         let total_size_opt = if self.inner.total_size > 0 {
@@ -295,6 +306,7 @@ where
         is_multi: AtomicBool::new(multi_eligible),
         last_polled_bytes: AtomicU64::new(0),
         last_polled_time: std::sync::Mutex::new(Instant::now()),
+        smoothed_speed: std::sync::Mutex::new(0.0),
     });
 
     // Spawn initial download task
@@ -412,6 +424,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
     let progress_handle = tokio::spawn(async move {
         let mut last_total: u64 = 0;
         let mut last_speed_time = Instant::now();
+        let mut smoothed_speed: f64 = 0.0;
 
         loop {
             tokio::select! {
@@ -436,15 +449,20 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
             total_downloaded = total_downloaded.max(last_total);
 
             let elapsed = last_speed_time.elapsed().as_secs_f64();
-            let speed = if elapsed > 0.0 {
-                (total_downloaded.saturating_sub(last_total)) as f64 / elapsed
-            } else {
-                0.0
-            };
+            if elapsed > 0.0 {
+                let instant_speed =
+                    (total_downloaded.saturating_sub(last_total)) as f64 / elapsed;
+                const ALPHA: f64 = 0.3;
+                smoothed_speed = if smoothed_speed > 0.0 {
+                    ALPHA * instant_speed + (1.0 - ALPHA) * smoothed_speed
+                } else {
+                    instant_speed
+                };
+            }
 
-            let eta = if speed > 0.0 {
+            let eta = if smoothed_speed > 0.0 {
                 let remaining = total_size.saturating_sub(total_downloaded);
-                Some((remaining as f64 / speed) as u64)
+                Some((remaining as f64 / smoothed_speed) as u64)
             } else {
                 None
             };
@@ -453,7 +471,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
                 download_id: String::new(),
                 downloaded_size: total_downloaded,
                 total_size: Some(total_size),
-                speed,
+                speed: smoothed_speed,
                 eta_seconds: eta,
                 connections,
             });
@@ -1115,6 +1133,7 @@ where
     let progress_handle = tokio::spawn(async move {
         let mut last_total: u64 = 0;
         let mut last_speed_time = Instant::now();
+        let mut smoothed_speed: f64 = 0.0;
 
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(PROGRESS_INTERVAL_MS)).await;
@@ -1140,15 +1159,20 @@ where
             total_downloaded = total_downloaded.max(last_total);
 
             let elapsed = last_speed_time.elapsed().as_secs_f64();
-            let speed = if elapsed > 0.0 {
-                (total_downloaded.saturating_sub(last_total)) as f64 / elapsed
-            } else {
-                0.0
-            };
+            if elapsed > 0.0 {
+                let instant_speed =
+                    (total_downloaded.saturating_sub(last_total)) as f64 / elapsed;
+                const ALPHA: f64 = 0.3;
+                smoothed_speed = if smoothed_speed > 0.0 {
+                    ALPHA * instant_speed + (1.0 - ALPHA) * smoothed_speed
+                } else {
+                    instant_speed
+                };
+            }
 
-            let eta = if speed > 0.0 {
+            let eta = if smoothed_speed > 0.0 {
                 let remaining = total_size.saturating_sub(total_downloaded);
-                Some((remaining as f64 / speed) as u64)
+                Some((remaining as f64 / smoothed_speed) as u64)
             } else {
                 None
             };
@@ -1157,7 +1181,7 @@ where
                 download_id: String::new(),
                 downloaded_size: total_downloaded,
                 total_size: Some(total_size),
-                speed,
+                speed: smoothed_speed,
                 eta_seconds: eta,
                 connections,
             });

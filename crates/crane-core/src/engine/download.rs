@@ -110,10 +110,16 @@ where
                         file.write_all(&chunk).await?;
                         downloaded += chunk.len() as u64;
 
-                        // Update speed calculation every 1 second
+                        // Update speed with EMA smoothing every 1 second
                         let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
                         if speed_elapsed >= 1.0 {
-                            current_speed = (downloaded - last_speed_bytes) as f64 / speed_elapsed;
+                            let instant_speed = (downloaded - last_speed_bytes) as f64 / speed_elapsed;
+                            const ALPHA: f64 = 0.3;
+                            current_speed = if current_speed > 0.0 {
+                                ALPHA * instant_speed + (1.0 - ALPHA) * current_speed
+                            } else {
+                                instant_speed
+                            };
                             last_speed_bytes = downloaded;
                             last_speed_time = Instant::now();
                         }
