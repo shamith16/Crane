@@ -1,5 +1,4 @@
 import { For, Show, createMemo } from "solid-js";
-import type { JSX } from "solid-js";
 import type { Download } from "../../lib/types";
 import {
   sidebarCollapsed,
@@ -11,46 +10,30 @@ import {
   type StatusFilter,
   type CategoryFilter,
 } from "../../stores/ui";
-import {
-  Download as DownloadIcon,
-  Play,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Pause,
-  FileText,
-  Video,
-  Music,
-  Image as ImageIcon,
-  Archive,
-  Box,
-  File,
-} from "lucide-solid";
+import MaterialIcon from "../shared/MaterialIcon";
 
 interface Props {
   downloads: Download[];
 }
 
-const ICON_PROPS = { size: 18, "stroke-width": 1.75 };
-
-const STATUS_FILTERS: { key: StatusFilter; label: string; icon: () => JSX.Element }[] = [
-  { key: "all", label: "All Downloads", icon: () => <DownloadIcon {...ICON_PROPS} /> },
-  { key: "downloading", label: "Active", icon: () => <Play {...ICON_PROPS} /> },
-  { key: "queued", label: "Queued", icon: () => <Clock {...ICON_PROPS} /> },
-  { key: "completed", label: "Completed", icon: () => <CheckCircle {...ICON_PROPS} /> },
-  { key: "failed", label: "Failed", icon: () => <XCircle {...ICON_PROPS} /> },
-  { key: "paused", label: "Paused", icon: () => <Pause {...ICON_PROPS} /> },
+const STATUS_FILTERS: { key: StatusFilter; label: string; icon: string }[] = [
+  { key: "all", label: "All Downloads", icon: "download" },
+  { key: "downloading", label: "Active", icon: "play_arrow" },
+  { key: "queued", label: "Queued", icon: "hourglass_empty" },
+  { key: "completed", label: "Completed", icon: "check_circle" },
+  { key: "failed", label: "Failed", icon: "error" },
+  { key: "paused", label: "Paused", icon: "pause" },
 ];
 
-const CATEGORY_FILTERS: { key: CategoryFilter; label: string; icon: () => JSX.Element }[] = [
-  { key: "all", label: "All Types", icon: () => <File {...ICON_PROPS} /> },
-  { key: "documents", label: "Documents", icon: () => <FileText {...ICON_PROPS} /> },
-  { key: "video", label: "Video", icon: () => <Video {...ICON_PROPS} /> },
-  { key: "audio", label: "Audio", icon: () => <Music {...ICON_PROPS} /> },
-  { key: "images", label: "Images", icon: () => <ImageIcon {...ICON_PROPS} /> },
-  { key: "archives", label: "Archives", icon: () => <Archive {...ICON_PROPS} /> },
-  { key: "software", label: "Software", icon: () => <Box {...ICON_PROPS} /> },
-  { key: "other", label: "Other", icon: () => <File {...ICON_PROPS} /> },
+const CATEGORY_FILTERS: { key: CategoryFilter; label: string; icon: string }[] = [
+  { key: "all", label: "All Types", icon: "insert_drive_file" },
+  { key: "documents", label: "Documents", icon: "description" },
+  { key: "video", label: "Video", icon: "movie" },
+  { key: "audio", label: "Audio", icon: "music_note" },
+  { key: "images", label: "Images", icon: "image" },
+  { key: "archives", label: "Archives", icon: "archive" },
+  { key: "software", label: "Software", icon: "widgets" },
+  { key: "other", label: "Other", icon: "insert_drive_file" },
 ];
 
 export default function Sidebar(props: Props) {
@@ -98,14 +81,16 @@ export default function Sidebar(props: Props) {
                     if (collapsed()) { e.stopPropagation(); toggleSidebar(); }
                     setStatusFilter(filter.key);
                   }}
-                  class={`flex items-center w-full rounded-lg text-xs transition-colors ${
+                  class={`flex items-center w-full rounded-full text-xs transition-colors ${
                     active()
                       ? "bg-active/10 text-active font-medium"
                       : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                   } ${collapsed() ? "justify-center p-2.5" : "gap-2.5 px-2.5 py-2"}`}
                   title={collapsed() ? `${filter.label} (${count()})` : undefined}
                 >
-                  <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
+                  <span class="flex-shrink-0 w-5 flex items-center justify-center">
+                    <MaterialIcon name={filter.icon} size={18} />
+                  </span>
                   <Show when={!collapsed()}>
                     <span class="flex-1 text-left truncate">{filter.label}</span>
                     <span class="text-text-muted tabular-nums text-[11px]">{count()}</span>
@@ -136,14 +121,16 @@ export default function Sidebar(props: Props) {
                     if (collapsed()) { e.stopPropagation(); toggleSidebar(); }
                     setCategoryFilter(filter.key);
                   }}
-                  class={`flex items-center w-full rounded-lg text-xs transition-colors ${
+                  class={`flex items-center w-full rounded-full text-xs transition-colors ${
                     active()
                       ? "bg-active/10 text-active font-medium"
                       : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                   } ${collapsed() ? "justify-center p-2.5" : "gap-2.5 px-2.5 py-2"}`}
                   title={collapsed() ? `${filter.label} (${count()})` : undefined}
                 >
-                  <span class="flex-shrink-0 w-5 flex items-center justify-center">{filter.icon()}</span>
+                  <span class="flex-shrink-0 w-5 flex items-center justify-center">
+                    <MaterialIcon name={filter.icon} size={18} />
+                  </span>
                   <Show when={!collapsed()}>
                     <span class="flex-1 text-left truncate">{filter.label}</span>
                     <span class="text-text-muted tabular-nums text-[11px]">{count()}</span>
