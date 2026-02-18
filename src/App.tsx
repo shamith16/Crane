@@ -10,13 +10,15 @@ import { useKeyboard } from "./hooks/useKeyboard";
 import { settingsOpen } from "./stores/ui";
 import { applyTheme } from "./lib/theme";
 import { addDownload, getSettings } from "./lib/commands";
-import type { Download } from "./lib/types";
+import StatsHeader from "./components/downloads/StatsHeader";
+import type { Download, DownloadProgress } from "./lib/types";
 
 export default function App() {
   useKeyboard();
 
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
   const [downloads, setDownloads] = createSignal<Download[]>([]);
+  const [progressMap, setProgressMap] = createSignal<Record<string, DownloadProgress>>({});
 
   onMount(() => {
     // Load theme from saved settings, falling back to dark
@@ -49,11 +51,13 @@ export default function App() {
     <DropZone onUrlDrop={handleUrlDrop} onFileDrop={handleFileDrop}>
       <div class="h-screen bg-bg text-text-primary flex flex-col">
         <UrlInput onDownloadAdded={handleDownloadAdded} />
+        <StatsHeader downloads={downloads()} progressMap={progressMap()} />
         <div class="flex flex-1 overflow-hidden">
           <Sidebar downloads={downloads()} />
           <DownloadList
             refreshTrigger={refreshTrigger()}
             onDownloadsLoaded={setDownloads}
+            onProgressUpdate={setProgressMap}
           />
           <DetailPanel />
         </div>
