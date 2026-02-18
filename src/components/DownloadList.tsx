@@ -3,8 +3,8 @@ import { createStore, reconcile } from "solid-js/store";
 import { getDownloads, subscribeProgress } from "../lib/commands";
 import type { Download, DownloadProgress } from "../lib/types";
 import { statusFilter, categoryFilter, setVisibleDownloadIds } from "../stores/ui";
-import { ChevronDown, ChevronRight } from "lucide-solid";
-import DownloadCard from "./downloads/DownloadCard";
+import DownloadRow from "./downloads/DownloadRow";
+import MaterialIcon from "./shared/MaterialIcon";
 import FloatingActionBar from "./shared/FloatingActionBar";
 
 // ─── Group definitions ──────────────────────────
@@ -80,6 +80,7 @@ function groupLabel(key: string, count: number): string {
 interface Props {
   refreshTrigger: number;
   onDownloadsLoaded?: (downloads: Download[]) => void;
+  onProgressUpdate?: (map: Record<string, DownloadProgress>) => void;
 }
 
 export default function DownloadList(props: Props) {
@@ -166,6 +167,11 @@ export default function DownloadList(props: Props) {
     setVisibleDownloadIds(visibleIds());
   });
 
+  // Forward progressMap to parent
+  createEffect(() => {
+    props.onProgressUpdate?.(progressMap());
+  });
+
   // ─── Group collapse ───────────────────────────
 
   function toggleGroupCollapse(key: string) {
@@ -215,18 +221,18 @@ export default function DownloadList(props: Props) {
                       aria-expanded={!isCollapsed()}
                     >
                       {isCollapsed()
-                        ? <ChevronRight size={14} stroke-width={2} />
-                        : <ChevronDown size={14} stroke-width={2} />}
+                        ? <MaterialIcon name="chevron_right" size={16} />
+                        : <MaterialIcon name="expand_more" size={16} />}
                       <span class="uppercase tracking-widest text-[10px]">{group.label}</span>
                     </button>
                   </Show>
 
                   {/* Group items — card grid */}
                   <Show when={!isCollapsed()}>
-                    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3.5">
+                    <div class="space-y-1">
                       <For each={group.downloads}>
                         {(dl) => (
-                          <DownloadCard
+                          <DownloadRow
                             download={dl}
                             progress={progressMap()[dl.id]}
                             onRefresh={refresh}
