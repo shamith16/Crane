@@ -1,6 +1,6 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Settings, FolderOpen } from "lucide-solid";
+import MaterialIcon from "./shared/MaterialIcon";
 import { analyzeUrl, addDownload } from "../lib/commands";
 import { formatSize } from "../lib/format";
 import type { UrlAnalysis, DownloadOptions, FileCategory, ExpectedHash } from "../lib/types";
@@ -231,14 +231,14 @@ export default function UrlInput(props: Props) {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder="Paste URL to download or press ⌘K for commands..."
-            class="flex-1 bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active transition-colors"
+            class="flex-1 bg-surface border border-border rounded-full px-4 py-2.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active transition-colors"
             disabled={loading()}
           />
           <Show when={!analysis()}>
             <button
               onClick={handleAnalyze}
               disabled={loading() || !url().trim()}
-              class="px-5 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-primary rounded-lg disabled:opacity-40 transition-colors"
+              class="px-5 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-primary rounded-full disabled:opacity-40 transition-colors"
             >
               {loading() ? "Analyzing..." : "Analyze"}
             </button>
@@ -246,15 +246,15 @@ export default function UrlInput(props: Props) {
           <Show when={analysis()}>
             <button
               onClick={() => setShowOptions((v) => !v)}
-              class="px-3 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-secondary rounded-lg transition-colors"
+              class="px-3 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-secondary rounded-full transition-colors"
               title="Download options"
             >
-              <Settings size={16} stroke-width={1.75} />
+              <MaterialIcon name="settings" size={16} />
             </button>
             <button
               onClick={handleDownload}
               disabled={loading()}
-              class="px-5 py-2.5 bg-active hover:bg-active/80 text-sm text-white font-medium rounded-lg disabled:opacity-40 transition-colors"
+              class="px-5 py-2.5 bg-active hover:bg-active/80 text-sm text-white font-medium rounded-full disabled:opacity-40 transition-colors"
             >
               {loading() ? "Starting..." : "Download"}
             </button>
@@ -282,7 +282,7 @@ export default function UrlInput(props: Props) {
 
         {/* Options panel */}
         <Show when={showOptions() && analysis()}>
-          <div class="mt-3 p-3 bg-surface border border-border rounded-lg space-y-3">
+          <div class="mt-3 p-3 bg-surface border border-border rounded-2xl space-y-3">
             {/* Save location */}
             <div class="flex items-center gap-2">
               <label class="text-xs text-text-secondary w-24 shrink-0">Save to</label>
@@ -298,7 +298,7 @@ export default function UrlInput(props: Props) {
                 class="px-3 py-1.5 bg-border hover:bg-surface-hover text-xs text-text-secondary rounded transition-colors"
                 title="Browse folder"
               >
-                <FolderOpen size={14} stroke-width={2} />
+                <MaterialIcon name="folder_open" size={14} />
               </button>
             </div>
 
@@ -415,14 +415,14 @@ export default function UrlInput(props: Props) {
             <button
               onClick={exitBatchMode}
               disabled={batchLoading()}
-              class="px-4 py-2 bg-border hover:bg-surface-hover text-xs text-text-primary rounded-lg disabled:opacity-40 transition-colors"
+              class="px-4 py-2 bg-border hover:bg-surface-hover text-xs text-text-primary rounded-full disabled:opacity-40 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleBatchDownload}
               disabled={batchLoading() || checkedValidCount() === 0}
-              class="px-4 py-2 bg-active hover:bg-active/80 text-xs text-white font-medium rounded-lg disabled:opacity-40 transition-colors"
+              class="px-4 py-2 bg-active hover:bg-active/80 text-xs text-white font-medium rounded-full disabled:opacity-40 transition-colors"
             >
               {batchLoading()
                 ? "Starting..."
