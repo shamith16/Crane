@@ -79,7 +79,7 @@ export default function DownloadsSettings(props: Props) {
         <input
           type="number"
           min="0"
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active tabular-nums"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active tabular-nums"
           placeholder="0 = Unlimited"
           value={props.config.downloads.bandwidth_limit ?? 0}
           onInput={(e) => {
@@ -114,7 +114,7 @@ export default function DownloadsSettings(props: Props) {
         <input
           type="number"
           min="0"
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active tabular-nums"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active tabular-nums"
           placeholder="No threshold"
           value={
             props.config.downloads.large_file_threshold != null

@@ -25,14 +25,14 @@ export default function GeneralSettings(props: Props) {
         <div class="flex gap-2">
           <input
             type="text"
-            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+            class="flex-1 bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
             value={props.config.general.download_location}
             onInput={(e) =>
               update({ download_location: e.currentTarget.value })
             }
           />
           <button
-            class="px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-muted cursor-not-allowed"
+            class="px-3 py-2 bg-surface border border-border rounded-full text-sm text-text-muted cursor-not-allowed"
             disabled
             title="Coming soon"
           >
@@ -79,7 +79,7 @@ export default function GeneralSettings(props: Props) {
           Notification Level
         </label>
         <select
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
           value={props.config.general.notification_level}
           onChange={(e) =>
             update({
@@ -100,7 +100,7 @@ export default function GeneralSettings(props: Props) {
       <div class="space-y-1.5">
         <label class="text-sm font-medium text-text-secondary">Language</label>
         <select
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
           value={props.config.general.language}
           onChange={(e) => update({ language: e.currentTarget.value })}
         >

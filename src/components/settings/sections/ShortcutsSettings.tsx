@@ -1,5 +1,5 @@
 import { createSignal, createMemo, For } from "solid-js";
-import { Search } from "lucide-solid";
+import MaterialIcon from "../../shared/MaterialIcon";
 
 interface Shortcut {
   keys: string;
@@ -40,10 +40,10 @@ export default function ShortcutsSettings() {
 
       {/* Search */}
       <div class="relative">
-        <Search size={16} stroke-width={1.75} class="text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+        <MaterialIcon name="search" size={16} class="text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
-          class="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full pl-9 pr-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
           placeholder="Search shortcuts..."
           value={search()}
           onInput={(e) => setSearch(e.currentTarget.value)}

@@ -51,7 +51,7 @@ export default function BrowserSettings() {
                     : "Not tested"}
             </span>
             <button
-              class="px-3 py-1.5 bg-active text-white rounded-lg text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+              class="px-3 py-1.5 bg-active text-white rounded-full text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
               onClick={testConnection}
               disabled={testStatus() === "testing"}
             >

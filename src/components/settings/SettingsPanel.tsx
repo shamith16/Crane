@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onMount, Show } from "solid-js";
-import { X } from "lucide-solid";
+import MaterialIcon from "../shared/MaterialIcon";
 import { settingsOpen, setSettingsOpen } from "../../stores/ui";
 import { getSettings, updateSettings } from "../../lib/commands";
 import type { AppConfig } from "../../lib/types";
@@ -82,11 +82,11 @@ export default function SettingsPanel() {
         <div class="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h1 class="text-lg font-semibold text-text-primary">Settings</h1>
           <button
-            class="w-8 h-8 flex items-center justify-center rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
+            class="w-8 h-8 flex items-center justify-center rounded-full text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
             onClick={() => setSettingsOpen(false)}
             aria-label="Close settings"
           >
-            <X size={18} stroke-width={1.75} />
+            <MaterialIcon name="close" size={18} />
           </button>
         </div>
 
@@ -96,7 +96,7 @@ export default function SettingsPanel() {
           <nav class="w-56 shrink-0 border-r border-border overflow-y-auto py-2">
             {SECTIONS.map((section) => (
               <button
-                class={`w-full text-left px-6 py-2 text-sm transition-colors ${
+                class={`w-full text-left px-6 py-2 text-sm transition-colors rounded-full ${
                   activeSection() === section.id
                     ? "text-active bg-active/10 font-medium"
                     : "text-text-secondary hover:text-text-primary hover:bg-surface-hover"

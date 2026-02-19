@@ -28,7 +28,7 @@ export default function AppearanceSettings(props: Props) {
       <div class="space-y-1.5">
         <label class="text-sm font-medium text-text-secondary">Theme</label>
         <select
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
           value={props.config.appearance.theme}
           onChange={(e) =>
             update({
@@ -50,7 +50,7 @@ export default function AppearanceSettings(props: Props) {
         <div class="flex items-center gap-3">
           <input
             type="text"
-            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active font-mono"
+            class="flex-1 bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active font-mono"
             placeholder="#3B82F6"
             value={props.config.appearance.accent_color}
             onInput={(e) => update({ accent_color: e.currentTarget.value })}
@@ -71,7 +71,7 @@ export default function AppearanceSettings(props: Props) {
           Font Size
         </label>
         <select
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
           value={props.config.appearance.font_size}
           onChange={(e) =>
             update({

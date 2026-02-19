@@ -84,7 +84,7 @@ export default function AdvancedSettings() {
 
       {/* Status Message */}
       {statusMsg() && (
-        <div class="bg-active/10 text-active px-4 py-2 rounded-lg text-sm">
+        <div class="bg-active/10 text-active px-4 py-2 rounded-full text-sm">
           {statusMsg()}
         </div>
       )}
@@ -95,11 +95,11 @@ export default function AdvancedSettings() {
           Config File Location
         </label>
         <div class="flex gap-2">
-          <div class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-muted font-mono truncate">
+          <div class="flex-1 bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-muted font-mono truncate">
             {configPath()}
           </div>
           <button
-            class="px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary hover:bg-surface-hover transition-colors shrink-0"
+            class="px-3 py-2 bg-surface border border-border rounded-full text-sm text-text-primary hover:bg-surface-hover transition-colors shrink-0"
             onClick={handleOpenConfig}
           >
             Open Config File
@@ -115,13 +115,13 @@ export default function AdvancedSettings() {
         <div class="flex gap-2">
           <input
             type="text"
-            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+            class="flex-1 bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
             placeholder="Export file path (e.g., ~/crane-settings.toml)"
             value={exportPath()}
             onInput={(e) => setExportPath(e.currentTarget.value)}
           />
           <button
-            class="px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary hover:bg-surface-hover transition-colors shrink-0"
+            class="px-3 py-2 bg-surface border border-border rounded-full text-sm text-text-primary hover:bg-surface-hover transition-colors shrink-0"
             onClick={handleExport}
           >
             Export
@@ -137,13 +137,13 @@ export default function AdvancedSettings() {
         <div class="flex gap-2">
           <input
             type="text"
-            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+            class="flex-1 bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
             placeholder="Import file path (e.g., ~/crane-settings.toml)"
             value={importPath()}
             onInput={(e) => setImportPath(e.currentTarget.value)}
           />
           <button
-            class="px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary hover:bg-surface-hover transition-colors shrink-0"
+            class="px-3 py-2 bg-surface border border-border rounded-full text-sm text-text-primary hover:bg-surface-hover transition-colors shrink-0"
             onClick={handleImport}
           >
             Import
@@ -162,7 +162,7 @@ export default function AdvancedSettings() {
         </div>
         <div class="flex items-center gap-3">
           <button
-            class={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            class={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               confirmReset()
                 ? "bg-error text-white hover:opacity-90"
                 : "bg-error/20 text-error hover:bg-error/30"

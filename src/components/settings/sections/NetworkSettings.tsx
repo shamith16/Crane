@@ -34,7 +34,7 @@ export default function NetworkSettings(props: Props) {
           Proxy Mode
         </label>
         <select
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
           value={proxyMode()}
           onChange={(e) =>
             updateProxy({
@@ -58,7 +58,7 @@ export default function NetworkSettings(props: Props) {
             </label>
             <input
               type="text"
-              class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+              class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
               placeholder="127.0.0.1"
               value={props.config.network.proxy.host ?? ""}
               onInput={(e) =>
@@ -70,7 +70,7 @@ export default function NetworkSettings(props: Props) {
             <label class="text-sm font-medium text-text-secondary">Port</label>
             <input
               type="number"
-              class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active tabular-nums"
+              class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active tabular-nums"
               placeholder="8080"
               value={props.config.network.proxy.port ?? ""}
               onInput={(e) => {
@@ -89,7 +89,7 @@ export default function NetworkSettings(props: Props) {
             </label>
             <input
               type="text"
-              class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+              class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
               placeholder="Optional"
               value={props.config.network.proxy.username ?? ""}
               onInput={(e) =>
@@ -103,7 +103,7 @@ export default function NetworkSettings(props: Props) {
             </label>
             <input
               type="password"
-              class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+              class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
               placeholder="Optional"
               value={props.config.network.proxy.password ?? ""}
               onInput={(e) =>

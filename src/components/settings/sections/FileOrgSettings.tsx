@@ -76,7 +76,7 @@ export default function FileOrgSettings(props: Props) {
           Duplicate File Handling
         </label>
         <select
-          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
+          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
           value={props.config.file_organization.duplicate_handling}
           onChange={(e) =>
             update({
@@ -109,7 +109,7 @@ export default function FileOrgSettings(props: Props) {
                 </span>
                 <input
                   type="text"
-                  class="flex-1 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
+                  class="flex-1 bg-surface border border-border rounded-full px-3 py-1.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active"
                   placeholder={category}
                   value={
                     props.config.file_organization.category_folders[category] ??
