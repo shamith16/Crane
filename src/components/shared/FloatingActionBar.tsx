@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import { Pause, Play, Trash2, XCircle } from "lucide-solid";
+import MaterialIcon from "./MaterialIcon";
 import {
   selectedIds,
   clearSelection,
@@ -57,30 +57,30 @@ export default function FloatingActionBar(props: Props) {
 
   return (
     <Show when={count() > 0}>
-      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-surface/90 backdrop-blur-md border border-border rounded-2xl shadow-lg animate-fade-in">
+      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-surface/90 backdrop-blur-md border border-border rounded-full shadow-lg animate-fade-in">
         <span class="text-sm text-text-secondary tabular-nums font-medium">
           {count()} selected
         </span>
         <div class="w-px h-5 bg-border" />
         <button
           onClick={handlePauseSelected}
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-lg transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-full transition-colors"
         >
-          <Pause size={14} stroke-width={1.75} />
+          <MaterialIcon name="pause" size={14} />
           Pause
         </button>
         <button
           onClick={handleResumeSelected}
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-lg transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-full transition-colors"
         >
-          <Play size={14} stroke-width={1.75} />
+          <MaterialIcon name="play_arrow" size={14} />
           Resume
         </button>
         <button
           onClick={handleDeleteSelected}
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-error/20 hover:bg-error/30 text-error rounded-lg transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-error/20 hover:bg-error/30 text-error rounded-full transition-colors"
         >
-          <Trash2 size={14} stroke-width={1.75} />
+          <MaterialIcon name="delete" size={14} />
           Delete
         </button>
         <div class="w-px h-5 bg-border" />
@@ -88,7 +88,7 @@ export default function FloatingActionBar(props: Props) {
           onClick={clearSelection}
           class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
         >
-          <XCircle size={14} stroke-width={1.75} />
+          <MaterialIcon name="cancel" size={14} />
           Clear
         </button>
       </div>

@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import type { JSX } from "solid-js";
-import { Download } from "lucide-solid";
+import MaterialIcon from "./MaterialIcon";
 
 interface Props {
   onUrlDrop: (url: string) => void;
@@ -73,9 +73,9 @@ export default function DropZone(props: Props) {
     >
       {props.children}
       <Show when={dragging()}>
-        <div class="absolute inset-0 bg-bg/90 flex items-center justify-center z-50 border-2 border-dashed border-active rounded-lg">
+        <div class="absolute inset-0 bg-bg/90 flex items-center justify-center z-50 border-2 border-dashed border-active rounded-2xl">
           <div class="text-center">
-            <Download size={48} stroke-width={1.5} class="text-active" />
+            <MaterialIcon name="download" size={48} class="text-active" />
             <div class="text-lg text-text-primary font-medium">Drop to download</div>
             <div class="text-sm text-text-secondary mt-1">URL or text file with URLs</div>
           </div>
