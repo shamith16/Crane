@@ -20,7 +20,7 @@ interface Props {
 export default function CommandItem(props: Props) {
   return (
     <button
-      class={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-md transition-colors ${
+      class={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl transition-colors ${
         props.active ? "bg-active/15 text-active" : "text-text-primary hover:bg-surface-hover"
       }`}
       onMouseEnter={props.onHover}

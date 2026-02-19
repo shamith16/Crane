@@ -5,7 +5,7 @@ import { pauseAll, resumeAll, deleteCompleted, getSettings } from "../../lib/com
 import CommandItem from "./CommandItem";
 import type { Command } from "./CommandItem";
 import type { Download } from "../../lib/types";
-import { Plus, Pause, Play, Trash2, Settings, PanelLeft, FolderOpen, File, Search } from "lucide-solid";
+import MaterialIcon from "../shared/MaterialIcon";
 
 // ─── Group display labels ─────────────────────────
 
@@ -36,7 +36,7 @@ export default function CommandPalette(props: Props) {
         id: "add-url",
         label: "Add URL",
         group: "actions",
-        icon: <Plus size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="add" size={16} />,
         action: () => {
           close();
           // Focus the URL input field
@@ -49,7 +49,7 @@ export default function CommandPalette(props: Props) {
         label: "Pause All Downloads",
         group: "actions",
         shortcut: "\u2318\u21E7P",
-        icon: <Pause size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="pause" size={16} />,
         action: () => {
           close();
           pauseAll();
@@ -60,7 +60,7 @@ export default function CommandPalette(props: Props) {
         label: "Resume All Downloads",
         group: "actions",
         shortcut: "\u2318\u21E7R",
-        icon: <Play size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="play_arrow" size={16} />,
         action: () => {
           close();
           resumeAll();
@@ -70,7 +70,7 @@ export default function CommandPalette(props: Props) {
         id: "clear-completed",
         label: "Clear Completed Downloads",
         group: "actions",
-        icon: <Trash2 size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="delete" size={16} />,
         action: () => {
           close();
           deleteCompleted();
@@ -80,7 +80,7 @@ export default function CommandPalette(props: Props) {
         id: "open-downloads-folder",
         label: "Open Downloads Folder",
         group: "actions",
-        icon: <FolderOpen size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="folder_open" size={16} />,
         action: () => {
           close();
           getSettings().then((config) => {
@@ -96,7 +96,7 @@ export default function CommandPalette(props: Props) {
         label: "Open Settings",
         group: "navigation",
         shortcut: "\u2318,",
-        icon: <Settings size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="settings" size={16} />,
         action: () => {
           close();
           setSettingsOpen(true);
@@ -107,7 +107,7 @@ export default function CommandPalette(props: Props) {
         label: "Toggle Sidebar",
         group: "navigation",
         shortcut: "\u2318B",
-        icon: <PanelLeft size={16} stroke-width={1.75} />,
+        icon: <MaterialIcon name="side_navigation" size={16} />,
         action: () => {
           close();
           toggleSidebar();
@@ -122,7 +122,7 @@ export default function CommandPalette(props: Props) {
       id: `dl-${dl.id}`,
       label: dl.filename,
       group: "downloads" as const,
-      icon: <File size={16} stroke-width={1.75} />,
+      icon: <MaterialIcon name="insert_drive_file" size={16} />,
       action: () => {
         close();
         setSelectedDownloadId(dl.id);
@@ -229,13 +229,13 @@ export default function CommandPalette(props: Props) {
       >
         <div
           ref={panelRef}
-          class="w-full max-w-lg bg-surface border border-border rounded-xl shadow-2xl overflow-hidden"
+          class="w-full max-w-lg bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden"
           role="dialog"
           aria-label="Command palette"
         >
           {/* Search input */}
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Search size={16} stroke-width={1.75} class="text-text-muted shrink-0" />
+            <MaterialIcon name="search" size={16} class="text-text-muted shrink-0" />
             <input
               ref={(el) => {
                 inputRef = el;
