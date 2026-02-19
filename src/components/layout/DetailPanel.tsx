@@ -1,5 +1,5 @@
 import { Show, Switch, Match, createEffect, createSignal, onCleanup } from "solid-js";
-import { X } from "lucide-solid";
+import MaterialIcon from "../shared/MaterialIcon";
 import { selectedDownloadId, closeDetailPanel } from "../../stores/ui";
 import {
   getDownload,
@@ -55,7 +55,7 @@ function ActionButton(props: {
     <button
       onClick={props.onClick}
       disabled={props.disabled}
-      class={`px-3 py-1.5 text-xs rounded transition-colors ${cls()} disabled:opacity-50 disabled:cursor-not-allowed`}
+      class={`px-3 py-1.5 text-xs rounded-full transition-colors ${cls()} disabled:opacity-50 disabled:cursor-not-allowed`}
     >
       {props.label}
     </button>
@@ -528,9 +528,9 @@ export default function DetailPanel() {
           </h2>
           <button
             onClick={closeDetailPanel}
-            class="ml-2 flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+            class="ml-2 flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
           >
-            <X size={14} stroke-width={1.75} />
+            <MaterialIcon name="close" size={16} />
           </button>
         </div>
 
