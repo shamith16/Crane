@@ -27,7 +27,7 @@
       "endpoints": [
         "https://github.com/shamith16/Crane/releases/latest/download/latest.json"
       ],
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEYxRDVGRjFDMUMwODQKUldTRXdNSHhYeDJQMGx4clpQSWtrQmUzTmlsZm1zRGlJSXRGWWw0OUNXUExxKzEwWFlxTzJySXEK"
     }
   },
   "bundle": {
