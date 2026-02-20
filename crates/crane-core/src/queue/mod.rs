@@ -1081,8 +1081,14 @@ mod tests {
         assert_eq!(deleted, 2);
 
         // Completed downloads should be gone
-        assert!(matches!(db.get_download("dc-1"), Err(CraneError::NotFound(_))));
-        assert!(matches!(db.get_download("dc-3"), Err(CraneError::NotFound(_))));
+        assert!(matches!(
+            db.get_download("dc-1"),
+            Err(CraneError::NotFound(_))
+        ));
+        assert!(matches!(
+            db.get_download("dc-3"),
+            Err(CraneError::NotFound(_))
+        ));
 
         // Others should remain
         assert!(db.get_download("dc-2").is_ok());
@@ -1602,9 +1608,6 @@ mod tests {
 
         // Verify it's fully cleaned up
         assert_eq!(qm.active_count().await, 0);
-        assert!(matches!(
-            db.get_download(&id),
-            Err(CraneError::NotFound(_))
-        ));
+        assert!(matches!(db.get_download(&id), Err(CraneError::NotFound(_))));
     }
 }

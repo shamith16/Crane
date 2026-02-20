@@ -1,10 +1,10 @@
 pub mod config;
-pub mod hash;
 pub mod db;
 pub mod engine;
 pub mod events;
+pub mod hash;
 pub mod metadata;
 pub mod network;
+pub mod protocol;
 pub mod queue;
 pub mod types;
-pub mod protocol;

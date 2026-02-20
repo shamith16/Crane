@@ -85,7 +85,11 @@ pub(crate) fn parse_ftp_url(url: &str) -> Result<FtpUrlParts, CraneError> {
     let filename = path
         .rsplit('/')
         .find(|seg| !seg.is_empty())
-        .map(|s| urlencoding::decode(s).unwrap_or_else(|_| s.into()).into_owned())
+        .map(|s| {
+            urlencoding::decode(s)
+                .unwrap_or_else(|_| s.into())
+                .into_owned()
+        })
         .unwrap_or_else(|| "download".to_string());
 
     let filename = if filename.is_empty() {
@@ -235,7 +239,6 @@ macro_rules! ftp_download_stream {
     }};
 }
 
-
 pub struct FtpHandler;
 
 #[async_trait]
@@ -343,7 +346,14 @@ impl ProtocolHandler for FtpHandler {
 
                 match connect_result {
                     Ok(mut ftp) => {
-                        ftp_download_stream!(ftp, parts, save_path, resume_from, cancel_token, on_progress)
+                        ftp_download_stream!(
+                            ftp,
+                            parts,
+                            save_path,
+                            resume_from,
+                            cancel_token,
+                            on_progress
+                        )
                     }
                     Err(e) => Err(e),
                 }
@@ -351,13 +361,11 @@ impl ProtocolHandler for FtpHandler {
                 use suppaftp::AsyncFtpStream;
 
                 let connect_result = async {
-                    let mut ftp = tokio::time::timeout(
-                        FTP_CONNECT_TIMEOUT,
-                        AsyncFtpStream::connect(&addr),
-                    )
-                    .await
-                    .map_err(|_| CraneError::Ftp("connection timed out".to_string()))?
-                    .map_err(|e| CraneError::Ftp(format!("connection failed: {e}")))?;
+                    let mut ftp =
+                        tokio::time::timeout(FTP_CONNECT_TIMEOUT, AsyncFtpStream::connect(&addr))
+                            .await
+                            .map_err(|_| CraneError::Ftp("connection timed out".to_string()))?
+                            .map_err(|e| CraneError::Ftp(format!("connection failed: {e}")))?;
                     ftp.login(&parts.username, &parts.password)
                         .await
                         .map_err(|e| CraneError::Ftp(format!("login failed: {e}")))?;
@@ -370,7 +378,14 @@ impl ProtocolHandler for FtpHandler {
 
                 match connect_result {
                     Ok(mut ftp) => {
-                        ftp_download_stream!(ftp, parts, save_path, resume_from, cancel_token, on_progress)
+                        ftp_download_stream!(
+                            ftp,
+                            parts,
+                            save_path,
+                            resume_from,
+                            cancel_token,
+                            on_progress
+                        )
                     }
                     Err(e) => Err(e),
                 }
@@ -407,10 +422,7 @@ impl ProtocolHandler for FtpHandler {
 }
 
 /// Analyze an FTP (non-TLS) connection: get file size and check resumability.
-async fn analyze_ftp(
-    addr: &str,
-    parts: &FtpUrlParts,
-) -> Result<(Option<u64>, bool), CraneError> {
+async fn analyze_ftp(addr: &str, parts: &FtpUrlParts) -> Result<(Option<u64>, bool), CraneError> {
     use suppaftp::types::FileType;
     use suppaftp::AsyncFtpStream;
 
@@ -442,21 +454,17 @@ async fn analyze_ftp(
 }
 
 /// Analyze an FTPS (TLS) connection: get file size and check resumability.
-async fn analyze_ftps(
-    addr: &str,
-    parts: &FtpUrlParts,
-) -> Result<(Option<u64>, bool), CraneError> {
+async fn analyze_ftps(addr: &str, parts: &FtpUrlParts) -> Result<(Option<u64>, bool), CraneError> {
     use suppaftp::types::FileType;
     use suppaftp::{AsyncRustlsConnector, AsyncRustlsFtpStream};
 
-    let ftp =
-        tokio::time::timeout(FTP_CONNECT_TIMEOUT, AsyncRustlsFtpStream::connect(addr))
-            .await
-            .map_err(|_| CraneError::Ftp("connection timed out".to_string()))?
-            .map_err(|e| CraneError::Ftp(format!("connection failed: {e}")))?;
+    let ftp = tokio::time::timeout(FTP_CONNECT_TIMEOUT, AsyncRustlsFtpStream::connect(addr))
+        .await
+        .map_err(|_| CraneError::Ftp("connection timed out".to_string()))?
+        .map_err(|e| CraneError::Ftp(format!("connection failed: {e}")))?;
 
-    let connector = build_rustls_connector()
-        .map_err(|e| CraneError::Ftp(format!("TLS setup failed: {e}")))?;
+    let connector =
+        build_rustls_connector().map_err(|e| CraneError::Ftp(format!("TLS setup failed: {e}")))?;
 
     let mut ftp = ftp
         .into_secure(AsyncRustlsConnector::from(connector), &parts.host)
@@ -494,7 +502,9 @@ fn build_rustls_connector() -> Result<futures_rustls::TlsConnector, rustls::Erro
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    Ok(futures_rustls::TlsConnector::from(std::sync::Arc::new(config)))
+    Ok(futures_rustls::TlsConnector::from(std::sync::Arc::new(
+        config,
+    )))
 }
 
 #[cfg(test)]
@@ -538,8 +548,7 @@ mod tests {
 
     #[test]
     fn test_parse_ftp_url_encoded_credentials() {
-        let parts =
-            parse_ftp_url("ftp://user%40domain:p%40ss@ftp.example.com/file.txt").unwrap();
+        let parts = parse_ftp_url("ftp://user%40domain:p%40ss@ftp.example.com/file.txt").unwrap();
         assert_eq!(parts.username, "user@domain");
         assert_eq!(parts.password, "p@ss");
         assert_eq!(parts.filename, "file.txt");

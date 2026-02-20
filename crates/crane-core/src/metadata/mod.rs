@@ -127,7 +127,10 @@ mod tests {
 
     #[test]
     fn test_sanitize_path_traversal() {
-        assert_eq!(sanitize_filename("../../.ssh/authorized_keys"), "authorized_keys");
+        assert_eq!(
+            sanitize_filename("../../.ssh/authorized_keys"),
+            "authorized_keys"
+        );
     }
 
     #[test]
@@ -171,13 +174,22 @@ mod tests {
     #[test]
     fn test_sanitize_url_decoded_traversal() {
         // Simulates what happens after URL decoding of %2F
-        assert_eq!(sanitize_filename("../../../etc/cron.d/backdoor"), "backdoor");
+        assert_eq!(
+            sanitize_filename("../../../etc/cron.d/backdoor"),
+            "backdoor"
+        );
     }
 
     #[test]
     fn test_sanitize_preserves_spaces_and_unicode() {
-        assert_eq!(sanitize_filename("my report (2026).pdf"), "my report (2026).pdf");
-        assert_eq!(sanitize_filename("日本語ファイル.txt"), "日本語ファイル.txt");
+        assert_eq!(
+            sanitize_filename("my report (2026).pdf"),
+            "my report (2026).pdf"
+        );
+        assert_eq!(
+            sanitize_filename("日本語ファイル.txt"),
+            "日本語ファイル.txt"
+        );
     }
 
     #[test]

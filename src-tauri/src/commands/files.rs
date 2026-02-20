@@ -49,10 +49,7 @@ pub async fn calculate_hash(
 }
 
 #[tauri::command]
-pub async fn get_download_path(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<String, String> {
+pub async fn get_download_path(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let dl = state
         .queue
         .db()

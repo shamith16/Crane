@@ -3,11 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use crate::types::CraneError;
 
 /// Known hostnames that should be blocked to prevent SSRF.
-const BLOCKED_HOSTNAMES: &[&str] = &[
-    "localhost",
-    "metadata.google.internal",
-    "metadata.internal",
-];
+const BLOCKED_HOSTNAMES: &[&str] = &["localhost", "metadata.google.internal", "metadata.internal"];
 
 /// Check whether a URL host is a private, loopback, or otherwise
 /// internal address that should not be accessed by a download manager.
@@ -139,18 +135,18 @@ pub fn safe_redirect_policy() -> reqwest::redirect::Policy {
         match scheme.as_str() {
             "http" | "https" => {}
             _ => {
-                return attempt.error(std::io::Error::other(
-                    format!("redirect to unsupported scheme: {scheme}"),
-                ));
+                return attempt.error(std::io::Error::other(format!(
+                    "redirect to unsupported scheme: {scheme}"
+                )));
             }
         }
 
         // Validate host is not private
         if let Some(ref host) = host {
             if !is_public_host(host) {
-                return attempt.error(std::io::Error::other(
-                    format!("redirect to private/internal host blocked: {host}"),
-                ));
+                return attempt.error(std::io::Error::other(format!(
+                    "redirect to private/internal host blocked: {host}"
+                )));
             }
         }
 

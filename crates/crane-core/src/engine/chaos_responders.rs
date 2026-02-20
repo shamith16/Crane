@@ -182,8 +182,7 @@ impl wiremock::Respond for FailThenSucceedResponder {
     fn respond(&self, _request: &wiremock::Request) -> wiremock::ResponseTemplate {
         let count = self.call_count.fetch_add(1, Ordering::SeqCst);
         if count < self.fail_count {
-            wiremock::ResponseTemplate::new(500)
-                .insert_header("Content-Length", "0")
+            wiremock::ResponseTemplate::new(500).insert_header("Content-Length", "0")
         } else {
             wiremock::ResponseTemplate::new(200)
                 .set_body_bytes(self.body.clone())

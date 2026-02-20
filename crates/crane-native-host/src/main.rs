@@ -87,11 +87,25 @@ fn categorize_mime(mime: Option<&str>) -> FileCategory {
 
 /// Cookie names that are considered sensitive and should not be persisted to the database.
 const SENSITIVE_COOKIE_NAMES: &[&str] = &[
-    "session", "sessionid", "session_id", "sid",
-    "token", "access_token", "refresh_token", "auth_token",
-    "jwt", "authorization", "auth",
-    "csrf", "csrftoken", "xsrf-token", "_csrf",
-    "connect.sid", "phpsessid", "jsessionid", "asp.net_sessionid",
+    "session",
+    "sessionid",
+    "session_id",
+    "sid",
+    "token",
+    "access_token",
+    "refresh_token",
+    "auth_token",
+    "jwt",
+    "authorization",
+    "auth",
+    "csrf",
+    "csrftoken",
+    "xsrf-token",
+    "_csrf",
+    "connect.sid",
+    "phpsessid",
+    "jsessionid",
+    "asp.net_sessionid",
 ];
 
 /// Filter out sensitive cookies (session tokens, auth tokens) before database storage.

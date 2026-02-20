@@ -60,31 +60,21 @@ pub async fn open_config_file(state: State<'_, AppState>) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub async fn export_settings(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<(), String> {
+pub async fn export_settings(state: State<'_, AppState>, path: String) -> Result<(), String> {
     let export_path = std::path::Path::new(&path);
     validate_settings_path(export_path)?;
 
     let config = state.config.lock().await;
-    config
-        .export_to(export_path)
-        .map_err(|e| e.to_string())
+    config.export_to(export_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn import_settings(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<(), String> {
+pub async fn import_settings(state: State<'_, AppState>, path: String) -> Result<(), String> {
     let import_path = std::path::Path::new(&path);
     validate_settings_path(import_path)?;
 
     let mut config = state.config.lock().await;
-    config
-        .import_from(import_path)
-        .map_err(|e| e.to_string())
+    config.import_from(import_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

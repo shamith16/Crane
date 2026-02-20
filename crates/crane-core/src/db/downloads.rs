@@ -684,8 +684,14 @@ mod tests {
         assert_eq!(deleted, 2);
 
         // Completed ones should be gone
-        assert!(matches!(db.get_download("dl-1"), Err(CraneError::NotFound(_))));
-        assert!(matches!(db.get_download("dl-3"), Err(CraneError::NotFound(_))));
+        assert!(matches!(
+            db.get_download("dl-1"),
+            Err(CraneError::NotFound(_))
+        ));
+        assert!(matches!(
+            db.get_download("dl-3"),
+            Err(CraneError::NotFound(_))
+        ));
 
         // Non-completed ones should remain
         assert!(db.get_download("dl-2").is_ok());

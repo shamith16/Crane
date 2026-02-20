@@ -4,8 +4,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult, UrlAnalysis};
 use super::ProtocolHandler;
+use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult, UrlAnalysis};
 
 pub struct HttpHandler;
 

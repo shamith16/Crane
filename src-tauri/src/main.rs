@@ -33,8 +33,8 @@ fn main() {
                 .expect("Cannot determine config directory")
                 .join("crane");
             let config_path = config_dir.join("config.toml");
-            let config_manager = crane_core::config::ConfigManager::load(&config_path)
-                .expect("Cannot load config");
+            let config_manager =
+                crane_core::config::ConfigManager::load(&config_path).expect("Cannot load config");
 
             // Use config for save dir
             let save_dir = {

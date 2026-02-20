@@ -5,11 +5,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+use crc32fast::Hasher as Crc32Hasher;
 use futures_util::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
-use crc32fast::Hasher as Crc32Hasher;
 
 use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
 use crate::metadata::analyzer::analyze_url;
@@ -354,7 +354,9 @@ where
             if let Err(ref e) = result {
                 *inner2.error_message.lock().unwrap() = Some(e.to_string());
             }
-            inner2.finished.store(true, std::sync::atomic::Ordering::SeqCst);
+            inner2
+                .finished
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             result
         })
     };
@@ -450,8 +452,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
 
             let elapsed = last_speed_time.elapsed().as_secs_f64();
             if elapsed > 0.0 {
-                let instant_speed =
-                    (total_downloaded.saturating_sub(last_total)) as f64 / elapsed;
+                let instant_speed = (total_downloaded.saturating_sub(last_total)) as f64 / elapsed;
                 const ALPHA: f64 = 0.3;
                 smoothed_speed = if smoothed_speed > 0.0 {
                     ALPHA * instant_speed + (1.0 - ALPHA) * smoothed_speed
@@ -619,8 +620,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
 
     // Hash verification (if expected hash was provided)
     let hash_verified = if let Some(ref expected) = ctrl.options.expected_hash {
-        let actual =
-            crate::hash::compute_hash(&ctrl.save_path, expected.algorithm).await?;
+        let actual = crate::hash::compute_hash(&ctrl.save_path, expected.algorithm).await?;
         if actual != expected.value {
             let _ = tokio::fs::remove_file(&ctrl.save_path).await;
             ctrl.finished.store(true, Ordering::SeqCst);
@@ -1160,8 +1160,7 @@ where
 
             let elapsed = last_speed_time.elapsed().as_secs_f64();
             if elapsed > 0.0 {
-                let instant_speed =
-                    (total_downloaded.saturating_sub(last_total)) as f64 / elapsed;
+                let instant_speed = (total_downloaded.saturating_sub(last_total)) as f64 / elapsed;
                 const ALPHA: f64 = 0.3;
                 smoothed_speed = if smoothed_speed > 0.0 {
                     ALPHA * instant_speed + (1.0 - ALPHA) * smoothed_speed
@@ -1285,8 +1284,7 @@ where
 
     // Hash verification (if expected hash was provided)
     let hash_verified = if let Some(ref expected) = options.expected_hash {
-        let actual =
-            crate::hash::compute_hash(save_path, expected.algorithm).await?;
+        let actual = crate::hash::compute_hash(save_path, expected.algorithm).await?;
         if actual != expected.value {
             let _ = tokio::fs::remove_file(save_path).await;
             return Err(CraneError::HashMismatch {
@@ -2510,9 +2508,7 @@ mod tests {
         // GET: serve with 2s delay so we can pause mid-flight
         Mock::given(method("GET"))
             .and(path("/morphing.bin"))
-            .respond_with(
-                RangeResponder { body: body.clone() }
-            )
+            .respond_with(RangeResponder { body: body.clone() })
             .mount(&server)
             .await;
 
@@ -2799,8 +2795,7 @@ mod tests {
         // Manually write all 4 chunk files with valid data and CRC32 sidecars
         let chunks = plan_chunks(total_size, 4);
         for chunk in &chunks {
-            let chunk_data =
-                &body[chunk.range_start as usize..=chunk.range_end as usize];
+            let chunk_data = &body[chunk.range_start as usize..=chunk.range_end as usize];
             let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
             std::fs::write(&chunk_path, chunk_data).unwrap();
             write_chunk_checksum(&chunk_path).await.unwrap();

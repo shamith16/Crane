@@ -74,7 +74,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_hash_nonexistent_file() {
-        let result = compute_hash(Path::new("/tmp/nonexistent_crane_test_file"), HashAlgorithm::Sha256).await;
+        let result = compute_hash(
+            Path::new("/tmp/nonexistent_crane_test_file"),
+            HashAlgorithm::Sha256,
+        )
+        .await;
         assert!(result.is_err());
     }
 

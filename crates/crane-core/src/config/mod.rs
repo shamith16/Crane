@@ -19,10 +19,7 @@ impl ConfigManager {
                 CraneError::Config(format!("Failed to read config at {}: {e}", path.display()))
             })?;
             let config: AppConfig = toml::from_str(&contents).map_err(|e| {
-                CraneError::Config(format!(
-                    "Failed to parse config at {}: {e}",
-                    path.display()
-                ))
+                CraneError::Config(format!("Failed to parse config at {}: {e}", path.display()))
             })?;
             Ok(Self {
                 path: path.to_path_buf(),
@@ -95,7 +92,10 @@ impl ConfigManager {
         let toml_str = toml::to_string_pretty(&self.config)
             .map_err(|e| CraneError::Config(format!("Failed to serialize config: {e}")))?;
         std::fs::write(path, toml_str).map_err(|e| {
-            CraneError::Config(format!("Failed to export config to {}: {e}", path.display()))
+            CraneError::Config(format!(
+                "Failed to export config to {}: {e}",
+                path.display()
+            ))
         })?;
         Ok(())
     }
@@ -131,9 +131,7 @@ fn merge_json(target: &mut serde_json::Value, source: serde_json::Value) {
     match (target, source) {
         (Value::Object(ref mut target_map), Value::Object(source_map)) => {
             for (key, source_val) in source_map {
-                let entry = target_map
-                    .entry(key)
-                    .or_insert(Value::Null);
+                let entry = target_map.entry(key).or_insert(Value::Null);
                 merge_json(entry, source_val);
             }
         }
@@ -207,7 +205,10 @@ theme = "light"
         let c1 = manager.get();
         let c2 = manager2.get();
 
-        assert_eq!(c1.downloads.default_connections, c2.downloads.default_connections);
+        assert_eq!(
+            c1.downloads.default_connections,
+            c2.downloads.default_connections
+        );
         assert_eq!(c1.downloads.max_concurrent, c2.downloads.max_concurrent);
         assert_eq!(c1.appearance.theme, c2.appearance.theme);
         assert_eq!(c1.general.language, c2.general.language);

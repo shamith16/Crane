@@ -79,10 +79,7 @@ where
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let filename = save_path
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("");
+    let filename = save_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
     crate::metadata::validate_content_type(content_type.as_deref(), filename)?;
 
     let total_size = response.content_length();
@@ -244,8 +241,7 @@ where
 
                 // Hash verification (if expected hash was provided)
                 let hash_verified = if let Some(ref expected) = options.expected_hash {
-                    let actual =
-                        crate::hash::compute_hash(save_path, expected.algorithm).await?;
+                    let actual = crate::hash::compute_hash(save_path, expected.algorithm).await?;
                     if actual != expected.value {
                         let _ = tokio::fs::remove_file(save_path).await;
                         return Err(CraneError::HashMismatch {
@@ -1017,7 +1013,9 @@ mod tests {
         );
         let err_msg = format!("{}", result.unwrap_err());
         assert!(
-            err_msg.contains("private") || err_msg.contains("internal") || err_msg.contains("redirect"),
+            err_msg.contains("private")
+                || err_msg.contains("internal")
+                || err_msg.contains("redirect"),
             "error should mention private/internal host, got: {err_msg}"
         );
     }
@@ -1055,7 +1053,10 @@ mod tests {
             matches!(err, CraneError::ContentTypeMismatch { .. }),
             "expected ContentTypeMismatch, got: {err:?}"
         );
-        assert!(!save.exists(), "file should not be saved for captive portal");
+        assert!(
+            !save.exists(),
+            "file should not be saved for captive portal"
+        );
     }
 
     #[tokio::test]
