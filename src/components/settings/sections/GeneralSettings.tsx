@@ -96,23 +96,6 @@ export default function GeneralSettings(props: Props) {
         </select>
       </div>
 
-      {/* Language */}
-      <div class="space-y-1.5">
-        <label class="text-sm font-medium text-text-secondary">Language</label>
-        <select
-          class="w-full bg-surface border border-border rounded-full px-3 py-2 text-sm text-text-primary outline-none focus:border-active"
-          value={props.config.general.language}
-          onChange={(e) => update({ language: e.currentTarget.value })}
-        >
-          <option value="en">English</option>
-          <option value="es">Spanish</option>
-          <option value="fr">French</option>
-          <option value="de">German</option>
-          <option value="ja">Japanese</option>
-          <option value="zh">Chinese</option>
-        </select>
-      </div>
-
       {/* Auto-Update */}
       <div class="flex items-center justify-between">
         <div>

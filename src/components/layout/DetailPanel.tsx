@@ -13,7 +13,6 @@ import {
   openFile,
   openFolder,
   getDownloadPath,
-  calculateHash,
 } from "../../lib/commands";
 import { formatSize, formatSpeed, formatEta } from "../../lib/format";
 import type { Download, DownloadProgress, ConnectionProgress } from "../../lib/types";
@@ -251,10 +250,6 @@ function ActivePanel(props: { download: Download }) {
 
 function CompletedPanel(props: { download: Download }) {
   const dl = () => props.download;
-  const [hashResult, setHashResult] = createSignal<string | null>(null);
-  const [hashAlgo, setHashAlgo] = createSignal<"sha256" | "md5">("sha256");
-  const [hashLoading, setHashLoading] = createSignal(false);
-  const [verifyInput, setVerifyInput] = createSignal("");
   const [filePath, setFilePath] = createSignal<string | null>(null);
 
   // Fetch file path on mount
@@ -263,20 +258,6 @@ function CompletedPanel(props: { download: Download }) {
       .then((p) => setFilePath(p))
       .catch(() => setFilePath(dl().save_path));
   });
-
-  async function handleCalculateHash() {
-    setHashLoading(true);
-    setHashResult(null);
-    try {
-      const hash = await calculateHash(dl().id, hashAlgo());
-      setHashResult(hash);
-    } catch (e) {
-      console.error("Hash calculation failed:", e);
-      setHashResult("Error calculating hash");
-    } finally {
-      setHashLoading(false);
-    }
-  }
 
   async function handleOpenFile() {
     try { await openFile(dl().id); } catch (e) { console.error("Open file failed:", e); }
@@ -294,11 +275,6 @@ function CompletedPanel(props: { download: Download }) {
   async function handleDelete() {
     try { await deleteDownload(dl().id, false); closeDetailPanel(); } catch (e) { console.error("Delete failed:", e); }
   }
-
-  const verifyMatch = () => {
-    if (!hashResult() || !verifyInput().trim()) return null;
-    return hashResult()!.toLowerCase() === verifyInput().trim().toLowerCase();
-  };
 
   return (
     <div class="px-4 py-3 space-y-6">
@@ -330,57 +306,6 @@ function CompletedPanel(props: { download: Download }) {
           <ActionButton icon="refresh" label="Redownload" onClick={handleRedownload} />
           <ActionButton icon="delete" label="Delete" onClick={handleDelete} variant="danger" />
         </div>
-      </div>
-
-      {/* Hash verification */}
-      <div class="space-y-2">
-        <SectionTitle>Hash Verification</SectionTitle>
-        <div class="flex items-center gap-2">
-          <select
-            value={hashAlgo()}
-            onChange={(e) => setHashAlgo(e.currentTarget.value as "sha256" | "md5")}
-            class="text-xs bg-surface border border-border rounded px-2 py-1 text-text-primary focus:outline-none focus:border-active"
-          >
-            <option value="sha256">SHA-256</option>
-            <option value="md5">MD5</option>
-          </select>
-          <ActionButton
-            label={hashLoading() ? "Calculating..." : "Calculate"}
-            onClick={handleCalculateHash}
-            disabled={hashLoading()}
-          />
-        </div>
-        <Show when={hashResult()}>
-          <div class="space-y-2">
-            <div class="bg-bg rounded p-2">
-              <p class="text-[10px] text-text-muted mb-1">{hashAlgo().toUpperCase()}</p>
-              <p class="text-xs text-text-secondary break-all font-mono select-all">
-                {hashResult()}
-              </p>
-            </div>
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-text-muted mb-1">
-                Verify (paste expected hash)
-              </p>
-              <input
-                type="text"
-                value={verifyInput()}
-                onInput={(e) => setVerifyInput(e.currentTarget.value)}
-                placeholder="Paste hash to compare..."
-                class="w-full text-xs bg-bg border border-border rounded px-2 py-1.5 text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-active"
-              />
-              <Show when={verifyMatch() !== null}>
-                <p
-                  class={`text-xs mt-1 font-medium ${
-                    verifyMatch() ? "text-success" : "text-error"
-                  }`}
-                >
-                  {verifyMatch() ? "Match" : "Mismatch"}
-                </p>
-              </Show>
-            </div>
-          </div>
-        </Show>
       </div>
 
       {/* Metadata */}
@@ -470,24 +395,40 @@ function FailedPanel(props: { download: Download }) {
 
 export default function DetailPanel() {
   const [download, setDownload] = createSignal<Download | null>(null);
+  let previousStatus: string | null = null;
 
   createEffect(() => {
     const id = selectedDownloadId();
 
     if (!id) {
       setDownload(null);
+      previousStatus = null;
       return;
     }
 
+    previousStatus = null;
+
     // Initial fetch
     getDownload(id)
-      .then((dl) => setDownload(dl))
+      .then((dl) => {
+        previousStatus = dl.status;
+        setDownload(dl);
+      })
       .catch(() => setDownload(null));
 
     // Poll for status changes (e.g. downloading -> completed)
     const interval = setInterval(() => {
       getDownload(id)
-        .then((dl) => setDownload(dl))
+        .then((dl) => {
+          // Auto-close panel when an active download completes
+          const wasActive = previousStatus === "downloading" || previousStatus === "analyzing";
+          if (wasActive && (dl.status === "completed" || dl.status === "failed")) {
+            closeDetailPanel();
+            return;
+          }
+          previousStatus = dl.status;
+          setDownload(dl);
+        })
         .catch(() => closeDetailPanel());
     }, 2000);
 
@@ -503,7 +444,7 @@ export default function DetailPanel() {
 
   return (
     <Show when={selectedDownloadId()}>
-      <div class="w-[380px] flex-shrink-0 bg-surface border-l border-border flex flex-col overflow-y-auto">
+      <div class="w-[340px] flex-shrink-0 bg-surface border-l border-border flex flex-col overflow-y-auto">
         {/* Header */}
         <div class="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 class="text-sm font-medium text-text-primary truncate flex-1">

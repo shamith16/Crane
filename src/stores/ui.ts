@@ -12,9 +12,21 @@ export function toggleSidebar() {
 export type StatusFilter = "all" | "downloading" | "queued" | "completed" | "failed" | "paused";
 export type CategoryFilter = "all" | "documents" | "video" | "audio" | "images" | "archives" | "software" | "other";
 
-const [statusFilter, setStatusFilter] = createSignal<StatusFilter>("all");
-const [categoryFilter, setCategoryFilter] = createSignal<CategoryFilter>("all");
-export { statusFilter, setStatusFilter, categoryFilter, setCategoryFilter };
+const [statusFilter, setStatusFilterRaw] = createSignal<StatusFilter>("all");
+const [categoryFilter, setCategoryFilterRaw] = createSignal<CategoryFilter>("all");
+export { statusFilter, categoryFilter };
+
+export function setStatusFilter(value: StatusFilter) {
+  setStatusFilterRaw(value);
+  setSelectedDownloadId(null);
+  setSelectedIds(new Set<string>());
+}
+
+export function setCategoryFilter(value: CategoryFilter) {
+  setCategoryFilterRaw(value);
+  setSelectedDownloadId(null);
+  setSelectedIds(new Set<string>());
+}
 
 // Selected download (for detail panel)
 const [selectedDownloadId, setSelectedDownloadId] = createSignal<string | null>(null);

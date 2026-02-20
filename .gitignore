@@ -20,6 +20,9 @@ firebase-debug.log
 *.swp
 *.swo
 
+# Working documents
+docs/plans/
+
 # Environment
 .env
 .env.local

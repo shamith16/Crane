@@ -83,7 +83,7 @@ export default function Sidebar(props: Props) {
   return (
     <div
       class={`flex-shrink-0 bg-surface border-r border-border flex flex-col transition-all duration-200 overflow-y-auto overflow-x-hidden ${
-        collapsed() ? "w-14 cursor-pointer" : "w-[280px]"
+        collapsed() ? "w-14 cursor-pointer" : "w-[220px]"
       }`}
       onClick={collapsed() ? toggleSidebar : undefined}
     >

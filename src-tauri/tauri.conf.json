@@ -14,8 +14,8 @@
         "title": "Crane",
         "width": 1000,
         "height": 700,
-        "minWidth": 800,
-        "minHeight": 500
+        "minWidth": 960,
+        "minHeight": 560
       }
     ],
     "security": {
