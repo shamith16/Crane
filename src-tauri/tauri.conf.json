@@ -22,7 +22,16 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https:; font-src 'self' data:; connect-src ipc: http://ipc.localhost"
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/shamith16/Crane/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
+  },
   "bundle": {
+    "createUpdaterArtifacts": "v1Compatible",
     "active": true,
     "targets": "all",
     "icon": [

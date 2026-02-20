@@ -6,12 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
   test:
     name: Test (${{ matrix.os }})
+    needs: fmt
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,6 +64,9 @@ jobs:
 
       - name: Install JS dependencies
         run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
 
       - name: Build frontend
         run: npm run build
