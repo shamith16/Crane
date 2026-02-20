@@ -139,6 +139,8 @@ export interface AppearanceConfig {
   accent_color: string;
   font_size: "small" | "default" | "large";
   compact_mode: boolean;
+  list_density: "compact" | "comfortable" | "cozy";
+  window_opacity: number;
 }
 
 export interface SpeedScheduleEntry {
@@ -150,4 +152,9 @@ export interface SpeedScheduleEntry {
 export interface AppInfo {
   version: string;
   data_dir: string;
+}
+
+export interface DiskSpace {
+  free_bytes: number;
+  total_bytes: number;
 }

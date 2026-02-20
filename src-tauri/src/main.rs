@@ -114,6 +114,7 @@ fn main() {
             commands::files::calculate_hash,
             commands::files::get_download_path,
             commands::system::get_app_info,
+            commands::system::get_disk_space,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,23 +3,23 @@
 @layer base {
   :root {
     --bg: #0D0D0D;
-    --surface: #1A1A1A;
-    --surface-hover: #242424;
-    --border: rgba(255, 255, 255, 0.08);
-    --text-primary: #F0F0F0;
-    --text-secondary: #9A9A9E;
-    --text-muted: #5A5A63;
+    --surface: #161616;
+    --surface-hover: #1E1E1E;
+    --border: #2A2A2A;
+    --text-primary: #E8E8E8;
+    --text-secondary: #888888;
+    --text-muted: #555555;
     --active: #19e66b;
-    --success: #19e66b;
-    --warning: #FBBF24;
-    --error: #F87171;
+    --success: #22C55E;
+    --warning: #F59E0B;
+    --error: #EF4444;
     --accent: #15c95c;
 
     /* Glass & glow */
     --glass: rgba(25, 230, 107, 0.04);
     --glow-active: 0 0 20px rgba(25, 230, 107, 0.25);
-    --glow-success: 0 0 16px rgba(25, 230, 107, 0.2);
-    --glow-error: 0 0 16px rgba(248, 113, 113, 0.2);
+    --glow-success: 0 0 16px rgba(34, 197, 94, 0.2);
+    --glow-error: 0 0 16px rgba(239, 68, 68, 0.2);
   }
 
   .light {
@@ -45,8 +45,12 @@
   body {
     background-color: var(--bg);
     color: var(--text-primary);
-    font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
   }
 }
 
@@ -123,7 +127,7 @@
 /* ─── Tooltip styles (Kobalte) ──────────────────── */
 .tooltip-content {
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: 6px;
   font-size: 11px;
   background: var(--surface);
   color: var(--text-secondary);
@@ -174,4 +178,32 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* ─── List Density ─────────────────────────────── */
+[data-density="compact"] .download-card {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+[data-density="comfortable"] .download-card {
+  padding: 16px;
+  gap: 16px;
+}
+
+[data-density="cozy"] .download-card {
+  padding: 20px;
+  gap: 20px;
+}
+
+[data-density="compact"] .download-list-gap {
+  gap: 4px;
+}
+
+[data-density="comfortable"] .download-list-gap {
+  gap: 12px;
+}
+
+[data-density="cozy"] .download-list-gap {
+  gap: 16px;
 }

@@ -1,5 +1,6 @@
-import { Show } from "solid-js";
+import { Show, createMemo } from "solid-js";
 import MaterialIcon from "./MaterialIcon";
+import type { Download } from "../../lib/types";
 import {
   selectedIds,
   clearSelection,
@@ -13,14 +14,29 @@ import {
 } from "../../lib/commands";
 
 interface Props {
+  downloads: Download[];
   onRefresh: () => void;
 }
 
 export default function FloatingActionBar(props: Props) {
   const count = () => selectedIds().size;
 
+  const selectedDownloads = createMemo(() => {
+    const ids = selectedIds();
+    return props.downloads.filter((dl) => ids.has(dl.id));
+  });
+
+  const hasPausable = createMemo(() =>
+    selectedDownloads().some((dl) => dl.status === "downloading"),
+  );
+  const hasResumable = createMemo(() =>
+    selectedDownloads().some((dl) => dl.status === "paused"),
+  );
+
   async function handlePauseSelected() {
-    const ids = Array.from(selectedIds());
+    const ids = selectedDownloads()
+      .filter((dl) => dl.status === "downloading")
+      .map((dl) => dl.id);
     const results = await Promise.allSettled(ids.map((id) => pauseDownload(id)));
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
@@ -30,7 +46,9 @@ export default function FloatingActionBar(props: Props) {
   }
 
   async function handleResumeSelected() {
-    const ids = Array.from(selectedIds());
+    const ids = selectedDownloads()
+      .filter((dl) => dl.status === "paused")
+      .map((dl) => dl.id);
     const results = await Promise.allSettled(ids.map((id) => resumeDownload(id)));
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
@@ -46,7 +64,6 @@ export default function FloatingActionBar(props: Props) {
     if (failures.length > 0) {
       console.error(`${failures.length} delete(s) failed:`, failures);
     }
-    // Close detail panel if the viewed download was among those deleted
     const viewedId = selectedDownloadId();
     if (viewedId && ids.includes(viewedId)) {
       closeDetailPanel();
@@ -62,20 +79,24 @@ export default function FloatingActionBar(props: Props) {
           {count()} selected
         </span>
         <div class="w-px h-5 bg-border" />
-        <button
-          onClick={handlePauseSelected}
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-full transition-colors"
-        >
-          <MaterialIcon name="pause" size={14} />
-          Pause
-        </button>
-        <button
-          onClick={handleResumeSelected}
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-full transition-colors"
-        >
-          <MaterialIcon name="play_arrow" size={14} />
-          Resume
-        </button>
+        <Show when={hasPausable()}>
+          <button
+            onClick={handlePauseSelected}
+            class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-full transition-colors"
+          >
+            <MaterialIcon name="pause" size={14} />
+            Pause
+          </button>
+        </Show>
+        <Show when={hasResumable()}>
+          <button
+            onClick={handleResumeSelected}
+            class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-border hover:bg-surface-hover text-text-primary rounded-full transition-colors"
+          >
+            <MaterialIcon name="play_arrow" size={14} />
+            Resume
+          </button>
+        </Show>
         <button
           onClick={handleDeleteSelected}
           class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-error/20 hover:bg-error/30 text-error rounded-full transition-colors"

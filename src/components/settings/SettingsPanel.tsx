@@ -96,10 +96,10 @@ export default function SettingsPanel() {
           <nav class="w-56 shrink-0 border-r border-border overflow-y-auto py-2">
             {SECTIONS.map((section) => (
               <button
-                class={`w-full text-left px-6 py-2 text-sm transition-colors rounded-full ${
+                class={`w-full text-left px-6 py-2.5 text-sm transition-colors ${
                   activeSection() === section.id
-                    ? "text-active bg-active/10 font-medium"
-                    : "text-text-secondary hover:text-text-primary hover:bg-surface-hover"
+                    ? "text-active bg-active/10 font-medium border-l-2 border-active"
+                    : "text-text-secondary hover:text-text-primary hover:bg-surface-hover border-l-2 border-transparent"
                 }`}
                 onClick={() => setActiveSection(section.id)}
               >

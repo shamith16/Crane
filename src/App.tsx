@@ -8,9 +8,9 @@ import SettingsPanel from "./components/settings/SettingsPanel";
 import DropZone from "./components/shared/DropZone";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { settingsOpen } from "./stores/ui";
-import { applyTheme } from "./lib/theme";
+import { applyAppearance } from "./lib/theme";
 import { addDownload, getSettings } from "./lib/commands";
-import StatsHeader from "./components/downloads/StatsHeader";
+import StatusBar from "./components/layout/StatusBar";
 import type { Download, DownloadProgress } from "./lib/types";
 
 export default function App() {
@@ -23,8 +23,8 @@ export default function App() {
   onMount(() => {
     // Load theme from saved settings, falling back to dark
     getSettings()
-      .then((cfg) => applyTheme(cfg.appearance.theme))
-      .catch(() => applyTheme("dark"));
+      .then((cfg) => applyAppearance(cfg.appearance))
+      .catch(() => {});
   });
 
   function handleDownloadAdded() {
@@ -51,7 +51,6 @@ export default function App() {
     <DropZone onUrlDrop={handleUrlDrop} onFileDrop={handleFileDrop}>
       <div class="h-screen bg-bg text-text-primary flex flex-col">
         <UrlInput onDownloadAdded={handleDownloadAdded} />
-        <StatsHeader downloads={downloads()} progressMap={progressMap()} />
         <div class="flex flex-1 overflow-hidden">
           <Sidebar downloads={downloads()} />
           <DownloadList
@@ -61,6 +60,7 @@ export default function App() {
           />
           <DetailPanel />
         </div>
+        <StatusBar downloads={downloads()} progressMap={progressMap()} />
         <CommandPalette downloads={downloads()} />
         <Show when={settingsOpen()}>
           <SettingsPanel />

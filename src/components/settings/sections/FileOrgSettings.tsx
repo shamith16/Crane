@@ -139,7 +139,7 @@ function Toggle(props: { value: boolean; onChange: (v: boolean) => void }) {
       aria-checked={props.value}
     >
       <span
-        class={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${
+        class={`absolute left-0 top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${
           props.value ? "translate-x-5" : "translate-x-1"
         }`}
       />

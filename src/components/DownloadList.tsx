@@ -51,7 +51,7 @@ function groupDownloads(downloads: Download[]): DownloadGroup[] {
     if (buckets[key].length > 0) {
       groups.push({
         key,
-        label: groupLabel(key, buckets[key].length),
+        label: groupLabel(key),
         downloads: buckets[key],
         collapsible: key === "completed" || key === "failed",
       });
@@ -60,18 +60,13 @@ function groupDownloads(downloads: Download[]): DownloadGroup[] {
   return groups;
 }
 
-function groupLabel(key: string, count: number): string {
+function groupLabel(key: string): string {
   switch (key) {
-    case "active":
-      return `Active (${count})`;
-    case "queued":
-      return `Queued (${count})`;
-    case "completed":
-      return `Completed (${count})`;
-    case "failed":
-      return `Failed (${count})`;
-    default:
-      return key;
+    case "active": return "Active Downloads";
+    case "queued": return "Queued";
+    case "completed": return "Completed Today";
+    case "failed": return "Failed";
+    default: return key;
   }
 }
 
@@ -89,12 +84,14 @@ export default function DownloadList(props: Props) {
   const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set());
   let pollInterval: ReturnType<typeof setInterval>;
   const subscribedIds = new Set<string>();
+  let mounted = true;
 
   // ─── Data fetching ────────────────────────────
 
   async function refresh() {
     try {
       const list = await getDownloads();
+      if (!mounted) return;
       setDownloads(reconcile(list, { key: "id", merge: false }));
       props.onDownloadsLoaded?.(list);
 
@@ -103,6 +100,7 @@ export default function DownloadList(props: Props) {
         if (dl.status === "downloading" && !subscribedIds.has(dl.id)) {
           subscribedIds.add(dl.id);
           subscribeProgress(dl.id, (progress) => {
+            if (!mounted) return;
             setProgressMap((prev) => ({ ...prev, [progress.download_id]: progress }));
           });
         }
@@ -118,6 +116,7 @@ export default function DownloadList(props: Props) {
   });
 
   onCleanup(() => {
+    mounted = false;
     clearInterval(pollInterval);
   });
 
@@ -210,26 +209,30 @@ export default function DownloadList(props: Props) {
                   <Show
                     when={group.collapsible}
                     fallback={
-                      <div class="flex items-center gap-1.5 w-full py-2 text-xs font-semibold text-text-muted select-none">
-                        <span class="uppercase tracking-widest text-[10px]">{group.label}</span>
+                      <div class="flex items-center justify-between w-full py-3">
+                        <span class="text-sm font-semibold text-text-primary">{group.label}</span>
+                        <span class="text-[13px] text-text-secondary">{group.downloads.length} {group.downloads.length === 1 ? "item" : "items"}</span>
                       </div>
                     }
                   >
                     <button
-                      class="flex items-center gap-1 w-full py-2 text-xs font-semibold text-text-muted hover:text-text-secondary transition-colors select-none"
+                      class="flex items-center justify-between w-full py-3 hover:text-text-primary transition-colors"
                       onClick={() => toggleGroupCollapse(group.key)}
                       aria-expanded={!isCollapsed()}
                     >
-                      {isCollapsed()
-                        ? <MaterialIcon name="chevron_right" size={16} />
-                        : <MaterialIcon name="expand_more" size={16} />}
-                      <span class="uppercase tracking-widest text-[10px]">{group.label}</span>
+                      <div class="flex items-center gap-1">
+                        {isCollapsed()
+                          ? <MaterialIcon name="chevron_right" size={18} class="text-text-muted" />
+                          : <MaterialIcon name="expand_more" size={18} class="text-text-muted" />}
+                        <span class="text-sm font-semibold text-text-primary">{group.label}</span>
+                      </div>
+                      <span class="text-[13px] text-text-secondary">{group.downloads.length} {group.downloads.length === 1 ? "item" : "items"}</span>
                     </button>
                   </Show>
 
                   {/* Group items — card grid */}
                   <Show when={!isCollapsed()}>
-                    <div class="space-y-1">
+                    <div class="download-list-gap flex flex-col space-y-3">
                       <For each={group.downloads}>
                         {(dl) => (
                           <DownloadRow
@@ -250,7 +253,7 @@ export default function DownloadList(props: Props) {
       </Show>
 
       {/* Floating action bar for multi-select */}
-      <FloatingActionBar onRefresh={refresh} />
+      <FloatingActionBar downloads={[...downloads]} onRefresh={refresh} />
     </div>
   );
 }

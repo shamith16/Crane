@@ -47,6 +47,13 @@ function badgeFor(category: FileCategory): BadgeConfig {
   }
 }
 
+function formatTime(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
 // ─── Component ──────────────────────────────────
 
 interface Props {
@@ -171,108 +178,107 @@ export default function DownloadRow(props: Props) {
 
   return (
     <div
-      class={`flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all group animate-fade-in ${
+      class={`download-card flex gap-4 p-4 rounded-lg cursor-pointer transition-all group animate-fade-in ${
         isSelected()
-          ? "bg-active/10 border border-active/30"
-          : "hover:bg-surface-hover border border-transparent"
+          ? "bg-surface-hover border border-active/30"
+          : "bg-surface-hover border border-border hover:border-text-muted/20"
       }`}
       onClick={handleClick}
     >
       {/* Category icon */}
       <div
-        class={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${badge().bg} ${
-          isActive() ? "ring-1 ring-active/30" : ""
-        }`}
+        class={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${badge().bg}`}
       >
-        <MaterialIcon name={badge().icon} size={18} class={badge().text} />
+        <MaterialIcon name={badge().icon} size={20} class={badge().text} />
       </div>
 
-      {/* File info */}
+      {/* Content */}
       <div class="min-w-0 flex-1">
-        <p class="text-[13px] text-text-primary font-medium truncate">{dl().filename}</p>
-        <Show when={dl().source_domain}>
-          <p class="text-xs text-text-muted truncate">{dl().source_domain}</p>
-        </Show>
-      </div>
+        {/* Top line: filename + stats */}
+        <div class="flex items-center gap-3">
+          <p class="text-sm text-text-primary font-semibold truncate flex-1">{dl().filename}</p>
 
-      {/* Size column */}
-      <div class="text-xs text-text-secondary tabular-nums shrink-0 w-28 text-right">
-        <Show when={isActive() || isPaused()}>
-          {formatSize(liveProgress().downloaded)}
-          {liveProgress().total ? ` / ${formatSize(liveProgress().total)}` : ""}
-        </Show>
-        <Show when={isCompleted()}>
-          {formatSize(dl().total_size)}
-        </Show>
-        <Show when={isFailed()}>
-          {formatSize(dl().downloaded_size)}
-          {dl().total_size ? ` / ${formatSize(dl().total_size)}` : ""}
-        </Show>
-        <Show when={isQueued() && dl().total_size}>
-          {formatSize(dl().total_size)}
-        </Show>
-      </div>
+          {/* Speed */}
+          <Show when={isActive()}>
+            <span class="text-xs text-active tabular-nums shrink-0">{formatSpeed(liveProgress().speed)}</span>
+          </Show>
+          <Show when={isPaused()}>
+            <span class="text-xs text-warning shrink-0">Paused</span>
+          </Show>
 
-      {/* Progress bar (for active/paused) */}
-      <div class="w-32 shrink-0">
+          {/* ETA */}
+          <Show when={isActive() && liveProgress().eta !== null}>
+            <span class="text-xs text-text-muted tabular-nums shrink-0">~{formatEta(liveProgress().eta)}</span>
+          </Show>
+
+          {/* Size */}
+          <span class="text-xs text-text-secondary tabular-nums shrink-0">
+            <Show when={isActive() || isPaused()}>
+              {formatSize(liveProgress().downloaded)} / {formatSize(liveProgress().total)}
+            </Show>
+            <Show when={isCompleted()}>
+              {formatSize(dl().total_size)}
+            </Show>
+            <Show when={isFailed()}>
+              {formatSize(dl().downloaded_size)}{dl().total_size ? ` / ${formatSize(dl().total_size)}` : ""}
+            </Show>
+            <Show when={isQueued() && dl().total_size}>
+              {formatSize(dl().total_size)}
+            </Show>
+          </span>
+        </div>
+
+        {/* Second line: domain + status badges */}
+        <div class="flex items-center gap-2 mt-0.5">
+          <Show when={dl().source_domain}>
+            <span class="text-xs text-text-muted truncate">{dl().source_domain}</span>
+          </Show>
+          <Show when={isCompleted()}>
+            <span class="text-xs text-success flex items-center gap-1">
+              <MaterialIcon name="check_circle" size={14} class="text-success" filled />
+              Done
+            </span>
+            <Show when={dl().completed_at}>
+              <span class="text-xs text-text-muted">Today at {formatTime(dl().completed_at)}</span>
+            </Show>
+          </Show>
+          <Show when={isFailed()}>
+            <span class="text-xs text-error flex items-center gap-1 truncate">
+              <MaterialIcon name="error" size={14} class="text-error" filled />
+              {dl().error_message || "Failed"}
+            </span>
+          </Show>
+          <Show when={isQueued()}>
+            <span class="text-xs text-text-muted flex items-center gap-1">
+              <MaterialIcon name="hourglass_empty" size={14} />
+              {dl().status === "queued" ? "Queued" : "Pending"}
+            </span>
+          </Show>
+        </div>
+
+        {/* Progress bar (for active/paused) */}
         <Show when={isActive() || isPaused()}>
-          <div class="flex items-center gap-2">
-            <div class="flex-1 h-1 bg-bg rounded-full overflow-hidden">
+          <div class="mt-2">
+            <div class="h-1 bg-border rounded-sm overflow-hidden">
               <div
-                class={`h-full rounded-full transition-all duration-300 ${
+                class={`h-full rounded-sm transition-all duration-300 ${
                   isPaused() ? "bg-warning" : "progress-shimmer"
                 }`}
                 style={{ width: `${percentComplete()}%` }}
               />
             </div>
-            <span class="text-[11px] text-text-secondary tabular-nums w-8 text-right">
-              {Math.round(percentComplete())}%
-            </span>
           </div>
-        </Show>
-        <Show when={isCompleted()}>
-          <span class="text-xs text-success flex items-center gap-1">
-            <MaterialIcon name="check_circle" size={14} class="text-success" filled />
-            Done
-          </span>
-        </Show>
-        <Show when={isFailed()}>
-          <span class="text-xs text-error flex items-center gap-1 truncate">
-            <MaterialIcon name="error" size={14} class="text-error" filled />
-            {dl().error_message || "Failed"}
-          </span>
-        </Show>
-        <Show when={isQueued()}>
-          <span class="text-xs text-text-muted flex items-center gap-1">
-            <MaterialIcon name="hourglass_empty" size={14} />
-            {dl().status === "queued" ? "Queued" : "Pending"}
-          </span>
-        </Show>
-      </div>
-
-      {/* Speed column */}
-      <div class="text-xs text-text-muted tabular-nums shrink-0 w-20 text-right">
-        <Show when={isActive()}>{formatSpeed(liveProgress().speed)}</Show>
-        <Show when={isPaused()}>
-          <span class="text-warning">Paused</span>
-        </Show>
-      </div>
-
-      {/* ETA column */}
-      <div class="text-xs text-text-muted tabular-nums shrink-0 w-20 text-right">
-        <Show when={isActive() && liveProgress().eta !== null}>
-          {formatEta(liveProgress().eta)}
         </Show>
       </div>
 
       {/* Hover actions */}
-      <div class="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div class="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity self-center">
         <Show when={dl().status === "downloading"}>
           <Tooltip openDelay={300}>
             <Tooltip.Trigger
               as="button"
               onClick={handlePause}
-              class="p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+              class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-border transition-all"
             >
               <MaterialIcon name="pause" size={16} />
             </Tooltip.Trigger>
@@ -287,7 +293,7 @@ export default function DownloadRow(props: Props) {
             <Tooltip.Trigger
               as="button"
               onClick={handleResume}
-              class="p-1.5 rounded-full text-text-secondary hover:text-active hover:bg-active/10 transition-all"
+              class="p-1.5 rounded-md text-text-secondary hover:text-active hover:bg-active/10 transition-all"
             >
               <MaterialIcon name="play_arrow" size={16} />
             </Tooltip.Trigger>
@@ -302,7 +308,7 @@ export default function DownloadRow(props: Props) {
             <Tooltip.Trigger
               as="button"
               onClick={handleRetry}
-              class="p-1.5 rounded-full text-error hover:bg-error/10 transition-all"
+              class="p-1.5 rounded-md text-error hover:bg-error/10 transition-all"
             >
               <MaterialIcon name="refresh" size={16} />
             </Tooltip.Trigger>
@@ -317,7 +323,7 @@ export default function DownloadRow(props: Props) {
             <Tooltip.Trigger
               as="button"
               onClick={handleOpenFile}
-              class="p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+              class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-border transition-all"
             >
               <MaterialIcon name="open_in_new" size={16} />
             </Tooltip.Trigger>
@@ -329,7 +335,7 @@ export default function DownloadRow(props: Props) {
             <Tooltip.Trigger
               as="button"
               onClick={handleOpenFolder}
-              class="p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+              class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-border transition-all"
             >
               <MaterialIcon name="folder_open" size={16} />
             </Tooltip.Trigger>
@@ -341,7 +347,7 @@ export default function DownloadRow(props: Props) {
             <Tooltip.Trigger
               as="button"
               onClick={handleRedownload}
-              class="p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-all"
+              class="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-border transition-all"
             >
               <MaterialIcon name="refresh" size={16} />
             </Tooltip.Trigger>

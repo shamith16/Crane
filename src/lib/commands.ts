@@ -3,6 +3,7 @@ import { Channel } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   AppInfo,
+  DiskSpace,
   Download,
   DownloadOptions,
   DownloadProgress,
@@ -126,4 +127,8 @@ export async function deleteCompleted(): Promise<number> {
 
 export async function getAppInfo(): Promise<AppInfo> {
   return invoke("get_app_info");
+}
+
+export async function getDiskSpace(path?: string): Promise<DiskSpace> {
+  return invoke("get_disk_space", { path: path ?? null });
 }

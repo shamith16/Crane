@@ -1,5 +1,6 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
+import { setSettingsOpen, clearSelection } from "../stores/ui";
 import MaterialIcon from "./shared/MaterialIcon";
 import { analyzeUrl, addDownload } from "../lib/commands";
 import { formatSize } from "../lib/format";
@@ -215,10 +216,16 @@ export default function UrlInput(props: Props) {
   // ─── Render ─────────────────────────────────────
 
   return (
-    <div class="border-b border-border p-4">
+    <div class="border-b border-border px-5 py-4 bg-surface">
       <Show when={!batchMode()}>
         {/* Single URL mode */}
-        <div class="flex gap-2">
+        <div class="flex items-center gap-3">
+          {/* Link icon */}
+          <span class="text-text-muted shrink-0">
+            <MaterialIcon name="link" size={20} />
+          </span>
+
+          {/* Input */}
           <input
             type="text"
             value={url()}
@@ -231,34 +238,42 @@ export default function UrlInput(props: Props) {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder="Paste URL to download or press ⌘K for commands..."
-            class="flex-1 bg-surface border border-border rounded-full px-4 py-2.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-active transition-colors"
+            class="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted outline-none"
             disabled={loading()}
           />
-          <Show when={!analysis()}>
-            <button
-              onClick={handleAnalyze}
-              disabled={loading() || !url().trim()}
-              class="px-5 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-primary rounded-full disabled:opacity-40 transition-colors"
-            >
-              {loading() ? "Analyzing..." : "Analyze"}
-            </button>
-          </Show>
+
+          {/* Options button (when analysis exists) */}
           <Show when={analysis()}>
             <button
               onClick={() => setShowOptions((v) => !v)}
-              class="px-3 py-2.5 bg-border hover:bg-surface-hover text-sm text-text-secondary rounded-full transition-colors"
+              class="w-8 h-8 flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors shrink-0"
               title="Download options"
             >
-              <MaterialIcon name="settings" size={16} />
+              <MaterialIcon name="tune" size={18} />
             </button>
+          </Show>
+
+          {/* Download button (only when analysis ready) */}
+          <Show when={analysis()}>
             <button
               onClick={handleDownload}
               disabled={loading()}
-              class="px-5 py-2.5 bg-active hover:bg-active/80 text-sm text-white font-medium rounded-full disabled:opacity-40 transition-colors"
+              class="w-8 h-8 flex items-center justify-center rounded-md bg-active text-white hover:bg-active/80 transition-colors shrink-0 disabled:opacity-40"
+              title="Download"
             >
-              {loading() ? "Starting..." : "Download"}
+              <MaterialIcon name="download" size={20} />
             </button>
           </Show>
+
+          {/* Settings gear */}
+          <button
+            onClick={() => { clearSelection(); setSettingsOpen((v) => !v); }}
+            class="w-8 h-8 flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors shrink-0"
+            title="Settings"
+          >
+            <MaterialIcon name="settings" size={20} />
+          </button>
+
         </div>
 
         {/* Error */}

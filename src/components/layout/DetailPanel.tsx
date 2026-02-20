@@ -22,14 +22,14 @@ import ConnectionSegments from "../downloads/ConnectionSegments";
 
 // ─── Helpers ─────────────────────────────────────
 
-function MetaRow(props: { label: string; value: string | null | undefined; breakAll?: boolean }) {
+function StatRow(props: { label: string; value: string | null | undefined; breakAll?: boolean; valueClass?: string }) {
   return (
     <Show when={props.value}>
-      <div>
-        <p class="text-[10px] uppercase tracking-wider text-text-muted mb-0.5">{props.label}</p>
-        <p class={`text-xs text-text-secondary ${props.breakAll ? "break-all" : "truncate"}`}>
+      <div class="flex items-start justify-between py-2 border-b border-border last:border-b-0">
+        <span class="text-[13px] text-text-secondary">{props.label}</span>
+        <span class={`text-[13px] text-text-primary font-medium text-right max-w-[60%] ${props.breakAll ? "break-all" : "truncate"} ${props.valueClass ?? ""}`}>
           {props.value}
-        </p>
+        </span>
       </div>
     </Show>
   );
@@ -37,6 +37,7 @@ function MetaRow(props: { label: string; value: string | null | undefined; break
 
 function ActionButton(props: {
   label: string;
+  icon?: string;
   onClick: () => void;
   variant?: "primary" | "danger" | "default";
   disabled?: boolean;
@@ -44,19 +45,22 @@ function ActionButton(props: {
   const cls = () => {
     switch (props.variant) {
       case "primary":
-        return "bg-active hover:bg-active/80 text-white";
+        return "bg-active hover:bg-active/80 text-white border-active";
       case "danger":
-        return "bg-error/20 hover:bg-error/30 text-error";
+        return "bg-error/10 hover:bg-error/20 text-error border-error";
       default:
-        return "bg-border hover:bg-surface-hover text-text-primary";
+        return "bg-surface hover:bg-surface-hover text-text-primary border-border";
     }
   };
   return (
     <button
       onClick={props.onClick}
       disabled={props.disabled}
-      class={`px-3 py-1.5 text-xs rounded-full transition-colors ${cls()} disabled:opacity-50 disabled:cursor-not-allowed`}
+      class={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-[13px] font-medium rounded-md border transition-colors ${cls()} disabled:opacity-50 disabled:cursor-not-allowed`}
     >
+      <Show when={props.icon}>
+        <MaterialIcon name={props.icon!} size={16} />
+      </Show>
       {props.label}
     </button>
   );
@@ -113,6 +117,12 @@ function ActivePanel(props: { download: Download }) {
   const [progress, setProgress] = createSignal<DownloadProgress | null>(null);
   const [speedHistory, setSpeedHistory] = createSignal<number[]>([]);
   let subscribedId: string | null = null;
+  let activeSubscription = true;
+
+  // Clean up on unmount — ignore any stale subscription callbacks
+  onCleanup(() => {
+    activeSubscription = false;
+  });
 
   // Subscribe to progress — only re-subscribe when the download ID changes,
   // not on every poll refresh (which creates a new object with the same ID).
@@ -123,12 +133,16 @@ function ActivePanel(props: { download: Download }) {
     if (id === subscribedId) return;
 
     subscribedId = id;
+    setProgress(null);
     setSpeedHistory([]);
+
+    // Capture the current ID so the callback ignores stale data
+    const expectedId = id;
     subscribeProgress(id, (p) => {
+      if (!activeSubscription || p.download_id !== expectedId) return;
       setProgress(p);
       setSpeedHistory((prev) => {
         const next = [...prev, p.speed];
-        // Keep max 240 samples (60s at 250ms interval)
         if (next.length > 240) next.shift();
         return next;
       });
@@ -163,41 +177,31 @@ function ActivePanel(props: { download: Download }) {
   const isPaused = () => dl().status === "paused";
 
   return (
-    <div class="px-4 py-3 space-y-4">
-      {/* Progress bar */}
+    <div class="px-4 py-3 space-y-6">
+      {/* Progress */}
       <div>
-        <div class="flex items-center justify-between mb-1.5">
-          <span class="text-xs tabular-nums text-text-primary font-medium">
-            {percentComplete().toFixed(1)}%
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-2xl font-bold tabular-nums text-text-primary">
+            {percentComplete().toFixed(0)}%
           </span>
-          <span class="text-xs tabular-nums text-text-secondary">
-            {formatSize(liveDownloaded())} / {formatSize(liveTotal())}
+          <span class="text-[13px] tabular-nums text-text-secondary">
+            ~{formatEta(liveEta())} remaining
           </span>
         </div>
-        <div class="h-2 bg-border rounded-full overflow-hidden">
+        <div class="h-2 bg-border rounded-sm overflow-hidden">
           <div
-            class={`h-full rounded-full transition-all duration-300 ${
+            class={`h-full rounded-sm transition-all duration-300 ${
               isPaused() ? "bg-warning" : "bg-active"
             }`}
             style={{ width: `${percentComplete()}%` }}
           />
-        </div>
-        <div class="flex items-center justify-between mt-1.5">
-          <span class="text-xs tabular-nums text-active">
-            {isPaused() ? "Paused" : formatSpeed(liveSpeed())}
-          </span>
-          <Show when={!isPaused() && liveEta() !== null}>
-            <span class="text-xs tabular-nums text-text-muted">
-              {formatEta(liveEta())} remaining
-            </span>
-          </Show>
         </div>
       </div>
 
       {/* Connection Segments */}
       <Show when={liveConnections().length > 0 && liveTotal()}>
         <div>
-          <SectionTitle>Connections</SectionTitle>
+          <SectionTitle>{`Connections (${liveConnections().length})`}</SectionTitle>
           <div class="mt-1.5">
             <ConnectionSegments
               connections={liveConnections()}
@@ -210,7 +214,7 @@ function ActivePanel(props: { download: Download }) {
       {/* Speed Graph */}
       <Show when={!isPaused()}>
         <div>
-          <SectionTitle>Speed</SectionTitle>
+          <SectionTitle>Speed (Last 60s)</SectionTitle>
           <div class="mt-1.5">
             <SpeedGraph speedHistory={speedHistory()} />
           </div>
@@ -218,32 +222,26 @@ function ActivePanel(props: { download: Download }) {
       </Show>
 
       {/* Actions */}
-      <div>
-        <SectionTitle>Actions</SectionTitle>
-        <div class="flex flex-wrap gap-2 mt-1.5">
-          <Show when={dl().status === "downloading"}>
-            <ActionButton label="Pause" onClick={handlePause} />
-          </Show>
-          <Show when={isPaused()}>
-            <ActionButton label="Resume" onClick={handleResume} variant="primary" />
-          </Show>
-          <ActionButton label="Cancel" onClick={handleCancel} variant="danger" />
-          <ActionButton label="Copy URL" onClick={handleCopyUrl} />
-        </div>
+      <div class="flex gap-3">
+        <Show when={dl().status === "downloading"}>
+          <ActionButton icon="pause" label="Pause" onClick={handlePause} />
+        </Show>
+        <Show when={isPaused()}>
+          <ActionButton icon="play_arrow" label="Resume" onClick={handleResume} variant="primary" />
+        </Show>
+        <ActionButton icon="close" label="Cancel" onClick={handleCancel} variant="danger" />
       </div>
 
-      {/* Metadata */}
-      <div class="space-y-2">
-        <SectionTitle>Details</SectionTitle>
-        <MetaRow label="URL" value={dl().url} breakAll />
-        <MetaRow label="Filename" value={dl().filename} />
-        <MetaRow label="MIME Type" value={dl().mime_type} />
-        <MetaRow label="Server" value={dl().source_domain} />
-        <MetaRow label="Size" value={formatSize(dl().total_size)} />
-        <MetaRow label="Resumable" value={dl().resumable ? "Yes" : "No"} />
-        <MetaRow label="Connections" value={String(dl().connections)} />
-        <MetaRow label="Save Location" value={dl().save_path} breakAll />
-        <MetaRow label="Category" value={dl().category} />
+      {/* File Info */}
+      <div>
+        <SectionTitle>File Info</SectionTitle>
+        <div class="mt-1">
+          <StatRow label="Source URL" value={dl().url} breakAll />
+          <StatRow label="File Size" value={formatSize(dl().total_size)} />
+          <StatRow label="Resume Support" value={dl().resumable ? "Yes" : "No"} valueClass={dl().resumable ? "text-success" : ""} />
+          <StatRow label="MIME Type" value={dl().mime_type} />
+          <StatRow label="Save Location" value={dl().save_path} breakAll />
+        </div>
       </div>
     </div>
   );
@@ -303,7 +301,7 @@ function CompletedPanel(props: { download: Download }) {
   };
 
   return (
-    <div class="px-4 py-3 space-y-4">
+    <div class="px-4 py-3 space-y-6">
       {/* Completed badge */}
       <div class="flex items-center gap-2">
         <div class="w-2 h-2 rounded-full bg-success" />
@@ -313,39 +311,24 @@ function CompletedPanel(props: { download: Download }) {
       {/* File info */}
       <div class="space-y-2">
         <SectionTitle>File Info</SectionTitle>
-        <div>
-          <p class="text-[10px] uppercase tracking-wider text-text-muted mb-0.5">Path</p>
-          <p
-            class="text-xs text-active break-all cursor-pointer hover:underline"
-            onClick={handleOpenFile}
-          >
-            {filePath() ?? dl().save_path}
-          </p>
-        </div>
-        <MetaRow label="Size" value={formatSize(dl().downloaded_size ?? dl().total_size)} />
-        <MetaRow label="Duration" value={computeDuration(dl().started_at, dl().completed_at)} />
-        <MetaRow
-          label="Average Speed"
-          value={computeAvgSpeed(
-            dl().downloaded_size ?? dl().total_size ?? 0,
-            dl().started_at,
-            dl().completed_at,
-          )}
-        />
-        <MetaRow label="Completed" value={formatDate(dl().completed_at)} />
-        <MetaRow label="Started" value={formatDate(dl().started_at)} />
-        <MetaRow label="Category" value={dl().category} />
+        <StatRow label="Path" value={filePath() ?? dl().save_path} breakAll valueClass="text-active cursor-pointer" />
+        <StatRow label="Size" value={formatSize(dl().downloaded_size ?? dl().total_size)} />
+        <StatRow label="Duration" value={computeDuration(dl().started_at, dl().completed_at)} />
+        <StatRow label="Average Speed" value={computeAvgSpeed(dl().downloaded_size ?? dl().total_size ?? 0, dl().started_at, dl().completed_at)} />
+        <StatRow label="Completed" value={formatDate(dl().completed_at)} />
+        <StatRow label="Started" value={formatDate(dl().started_at)} />
+        <StatRow label="Category" value={dl().category} />
       </div>
 
       {/* Actions */}
       <div>
         <SectionTitle>Actions</SectionTitle>
         <div class="flex flex-wrap gap-2 mt-1.5">
-          <ActionButton label="Open File" onClick={handleOpenFile} variant="primary" />
-          <ActionButton label="Open Folder" onClick={handleOpenFolder} />
-          <ActionButton label="Copy Path" onClick={handleCopyPath} />
-          <ActionButton label="Redownload" onClick={handleRedownload} />
-          <ActionButton label="Delete" onClick={handleDelete} variant="danger" />
+          <ActionButton icon="open_in_new" label="Open File" onClick={handleOpenFile} variant="primary" />
+          <ActionButton icon="folder_open" label="Open Folder" onClick={handleOpenFolder} />
+          <ActionButton icon="content_copy" label="Copy Path" onClick={handleCopyPath} />
+          <ActionButton icon="refresh" label="Redownload" onClick={handleRedownload} />
+          <ActionButton icon="delete" label="Delete" onClick={handleDelete} variant="danger" />
         </div>
       </div>
 
@@ -403,11 +386,11 @@ function CompletedPanel(props: { download: Download }) {
       {/* Metadata */}
       <div class="space-y-2">
         <SectionTitle>Details</SectionTitle>
-        <MetaRow label="URL" value={dl().url} breakAll />
-        <MetaRow label="Filename" value={dl().filename} />
-        <MetaRow label="MIME Type" value={dl().mime_type} />
-        <MetaRow label="Server" value={dl().source_domain} />
-        <MetaRow label="Connections" value={String(dl().connections)} />
+        <StatRow label="URL" value={dl().url} breakAll />
+        <StatRow label="Filename" value={dl().filename} />
+        <StatRow label="MIME Type" value={dl().mime_type} />
+        <StatRow label="Server" value={dl().source_domain} />
+        <StatRow label="Connections" value={String(dl().connections)} />
       </div>
     </div>
   );
@@ -429,7 +412,7 @@ function FailedPanel(props: { download: Download }) {
   }
 
   return (
-    <div class="px-4 py-3 space-y-4">
+    <div class="px-4 py-3 space-y-6">
       {/* Error header */}
       <div class="bg-error/10 border border-error/20 rounded-lg p-3">
         <div class="flex items-center gap-2 mb-2">
@@ -449,35 +432,35 @@ function FailedPanel(props: { download: Download }) {
       {/* Failure details */}
       <div class="space-y-2">
         <SectionTitle>Failure Details</SectionTitle>
-        <MetaRow
+        <StatRow
           label="Downloaded Before Failure"
           value={`${formatSize(dl().downloaded_size)}${dl().total_size ? ` / ${formatSize(dl().total_size)}` : ""}`}
         />
-        <MetaRow label="Retry Count" value={String(dl().retry_count)} />
-        <MetaRow label="Started" value={formatDate(dl().started_at)} />
-        <MetaRow label="Failed At" value={formatDate(dl().updated_at)} />
-        <MetaRow label="Created" value={formatDate(dl().created_at)} />
+        <StatRow label="Retry Count" value={String(dl().retry_count)} />
+        <StatRow label="Started" value={formatDate(dl().started_at)} />
+        <StatRow label="Failed At" value={formatDate(dl().updated_at)} />
+        <StatRow label="Created" value={formatDate(dl().created_at)} />
       </div>
 
       {/* Prominent Retry */}
       <div>
         <SectionTitle>Actions</SectionTitle>
         <div class="flex flex-wrap gap-2 mt-1.5">
-          <ActionButton label="Retry Download" onClick={handleRetry} variant="primary" />
-          <ActionButton label="Copy URL" onClick={handleCopyUrl} />
-          <ActionButton label="Delete" onClick={handleDelete} variant="danger" />
+          <ActionButton icon="refresh" label="Retry Download" onClick={handleRetry} variant="primary" />
+          <ActionButton icon="content_copy" label="Copy URL" onClick={handleCopyUrl} />
+          <ActionButton icon="delete" label="Delete" onClick={handleDelete} variant="danger" />
         </div>
       </div>
 
       {/* Metadata */}
       <div class="space-y-2">
         <SectionTitle>Details</SectionTitle>
-        <MetaRow label="URL" value={dl().url} breakAll />
-        <MetaRow label="Filename" value={dl().filename} />
-        <MetaRow label="MIME Type" value={dl().mime_type} />
-        <MetaRow label="Server" value={dl().source_domain} />
-        <MetaRow label="Save Location" value={dl().save_path} breakAll />
-        <MetaRow label="Category" value={dl().category} />
+        <StatRow label="URL" value={dl().url} breakAll />
+        <StatRow label="Filename" value={dl().filename} />
+        <StatRow label="MIME Type" value={dl().mime_type} />
+        <StatRow label="Server" value={dl().source_domain} />
+        <StatRow label="Save Location" value={dl().save_path} breakAll />
+        <StatRow label="Category" value={dl().category} />
       </div>
     </div>
   );
@@ -520,7 +503,7 @@ export default function DetailPanel() {
 
   return (
     <Show when={selectedDownloadId()}>
-      <div class="w-80 flex-shrink-0 bg-surface border-l border-border flex flex-col overflow-y-auto">
+      <div class="w-[380px] flex-shrink-0 bg-surface border-l border-border flex flex-col overflow-y-auto">
         {/* Header */}
         <div class="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 class="text-sm font-medium text-text-primary truncate flex-1">

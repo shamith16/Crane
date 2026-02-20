@@ -50,6 +50,15 @@ pub enum FontSize {
     Large,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ListDensity {
+    Compact,
+    #[default]
+    Comfortable,
+    Cozy,
+}
+
 // ─── Config Structs ─────────────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -169,6 +178,8 @@ pub struct AppearanceConfig {
     pub accent_color: String,
     pub font_size: FontSize,
     pub compact_mode: bool,
+    pub list_density: ListDensity,
+    pub window_opacity: f64,
 }
 
 impl Default for AppearanceConfig {
@@ -178,6 +189,8 @@ impl Default for AppearanceConfig {
             accent_color: "#3B82F6".to_string(),
             font_size: FontSize::Default,
             compact_mode: false,
+            list_density: ListDensity::Comfortable,
+            window_opacity: 1.0,
         }
     }
 }
