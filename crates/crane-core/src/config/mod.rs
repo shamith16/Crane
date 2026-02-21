@@ -263,6 +263,72 @@ theme = "light"
     }
 
     #[test]
+    fn test_validate_clamps_zero_max_concurrent() {
+        let mut config = AppConfig::default();
+        config.downloads.max_concurrent = 0;
+        let warnings = config.validate();
+        assert_eq!(config.downloads.max_concurrent, 1);
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validate_clamps_excessive_connections() {
+        let mut config = AppConfig::default();
+        config.downloads.default_connections = 500;
+        let warnings = config.validate();
+        assert_eq!(config.downloads.default_connections, 128);
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validate_clamps_window_opacity() {
+        let mut config = AppConfig::default();
+        config.appearance.window_opacity = 5.0;
+        let warnings = config.validate();
+        assert!((config.appearance.window_opacity - 1.0).abs() < f64::EPSILON);
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validate_clamps_low_opacity() {
+        let mut config = AppConfig::default();
+        config.appearance.window_opacity = 0.0;
+        let warnings = config.validate();
+        assert!((config.appearance.window_opacity - 0.1).abs() < f64::EPSILON);
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validate_clamps_bandwidth_limit() {
+        let mut config = AppConfig::default();
+        config.downloads.bandwidth_limit = Some(100);
+        let warnings = config.validate();
+        assert_eq!(config.downloads.bandwidth_limit, Some(1024));
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validate_clamps_schedule_hours() {
+        let mut config = AppConfig::default();
+        config.network.speed_schedule = vec![SpeedScheduleEntry {
+            start_hour: 25,
+            end_hour: 30,
+            limit: None,
+        }];
+        let warnings = config.validate();
+        assert_eq!(config.network.speed_schedule[0].start_hour, 23);
+        assert_eq!(config.network.speed_schedule[0].end_hour, 23);
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validate_default_config_has_no_warnings() {
+        let mut config = AppConfig::default();
+        let warnings = config.validate();
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
     fn test_export_import() {
         let tmp = TempDir::new().unwrap();
         let config_path = tmp.path().join("config.toml");
