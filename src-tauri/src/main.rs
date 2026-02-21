@@ -49,10 +49,20 @@ fn main() {
                 }
             };
 
+            // Extract queue/bandwidth settings before moving config_manager
+            let max_concurrent = config_manager.get().downloads.max_concurrent;
+            let bandwidth_limit = config_manager.get().downloads.bandwidth_limit;
+            let speed_schedule = config_manager.get().network.speed_schedule.clone();
+
             let config = Arc::new(tokio::sync::Mutex::new(config_manager));
 
-            // Create queue manager (max 3 concurrent downloads)
-            let queue = Arc::new(QueueManager::new(db, 3));
+            // Create queue manager with bandwidth settings from config
+            let queue = Arc::new(QueueManager::new(
+                db,
+                max_concurrent,
+                bandwidth_limit,
+                speed_schedule,
+            ));
 
             // Spawn completion + pending monitor with notifications
             let monitor_queue = queue.clone();

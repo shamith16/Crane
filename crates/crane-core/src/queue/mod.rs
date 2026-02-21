@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::bandwidth::BandwidthLimiter;
+use crate::config::types::SpeedScheduleEntry;
 use crate::db::Database;
 use crate::engine::multi::{start_download, DownloadHandle};
 use crate::metadata::analyzer::analyze_url;
@@ -19,16 +21,23 @@ pub struct QueueManager {
     active: tokio::sync::Mutex<HashMap<String, DownloadHandle>>,
     max_concurrent: u32,
     max_queue_size: u32,
+    limiter: Arc<BandwidthLimiter>,
 }
 
 impl QueueManager {
     /// Create a new queue manager backed by the given database.
-    pub fn new(db: Arc<Database>, max_concurrent: u32) -> Self {
+    pub fn new(
+        db: Arc<Database>,
+        max_concurrent: u32,
+        bandwidth_limit: Option<u64>,
+        speed_schedule: Vec<SpeedScheduleEntry>,
+    ) -> Self {
         Self {
             db,
             active: tokio::sync::Mutex::new(HashMap::new()),
             max_concurrent,
             max_queue_size: 1000,
+            limiter: Arc::new(BandwidthLimiter::new(bandwidth_limit, speed_schedule)),
         }
     }
 
@@ -348,6 +357,16 @@ impl QueueManager {
         self.db.delete_completed_downloads()
     }
 
+    /// Update the bandwidth limit at runtime.
+    pub fn set_bandwidth_limit(&self, limit: Option<u64>) {
+        self.limiter.set_limit(limit);
+    }
+
+    /// Update the speed schedule at runtime.
+    pub async fn set_speed_schedule(&self, schedule: Vec<SpeedScheduleEntry>) {
+        self.limiter.set_schedule(schedule).await;
+    }
+
     /// Pick up externally-inserted pending downloads (e.g., from the native messaging sidecar).
     /// For each pending download not already in the active map, starts it if there's capacity
     /// or queues it otherwise. Returns the IDs of downloads that were started.
@@ -416,7 +435,9 @@ impl QueueManager {
 
         let on_progress = move |_progress: &DownloadProgress| {};
 
-        let handle = start_download(&url, save_path, options, on_progress, None).await?;
+        let handle =
+            start_download(&url, save_path, options, on_progress, Some(self.limiter.clone()))
+                .await?;
 
         self.db
             .update_download_status(id, DownloadStatus::Downloading, None, None)?;
@@ -495,7 +516,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
@@ -520,7 +541,7 @@ mod tests {
         setup_server_file2(&server).await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 1);
+        let qm = QueueManager::new(db.clone(), 1, None, vec![]);
 
         let url1 = format!("{}/file.bin", server.uri());
         let _id1 = qm
@@ -559,7 +580,7 @@ mod tests {
         setup_server_file2(&server).await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 1);
+        let qm = QueueManager::new(db.clone(), 1, None, vec![]);
 
         let url1 = format!("{}/file.bin", server.uri());
         let id1 = qm
@@ -611,7 +632,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
@@ -640,7 +661,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
@@ -672,7 +693,7 @@ mod tests {
         setup_server_file2(&server).await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 1);
+        let qm = QueueManager::new(db.clone(), 1, None, vec![]);
 
         // Add first download (takes the only slot)
         let url1 = format!("{}/file.bin", server.uri());
@@ -720,7 +741,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
@@ -773,7 +794,7 @@ mod tests {
 
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/slow.bin", server.uri());
         let id = qm
@@ -799,7 +820,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_progress_returns_none_for_unknown() {
         let db = make_db();
-        let qm = QueueManager::new(db, 3);
+        let qm = QueueManager::new(db, 3, None, vec![]);
         assert!(qm.get_progress("nonexistent").await.is_none());
     }
 
@@ -810,7 +831,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         // Insert a download row directly into DB with status=pending,
         // simulating what the native messaging sidecar does.
@@ -862,7 +883,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_resets_failed_to_pending() {
         let db = make_db();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         // Insert a failed download directly into DB
         let dl = Download {
@@ -905,7 +926,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_rejects_non_failed() {
         let db = make_db();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let dl = Download {
             id: "retry-2".to_string(),
@@ -948,7 +969,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_removes_from_db() {
         let db = make_db();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let dl = Download {
             id: "del-1".to_string(),
@@ -992,7 +1013,7 @@ mod tests {
     async fn test_delete_with_file_removal() {
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let file_path = tmp.path().join("deleteme.bin");
         std::fs::write(&file_path, b"test data").unwrap();
@@ -1040,7 +1061,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_completed() {
         let db = make_db();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         for (id, status) in [
             ("dc-1", DownloadStatus::Completed),
@@ -1102,7 +1123,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 1);
+        let qm = QueueManager::new(db.clone(), 1, None, vec![]);
 
         // Fill the only slot with a real download via add_download
         let url1 = format!("{}/file.bin", server.uri());
@@ -1185,7 +1206,7 @@ mod tests {
 
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 1).with_max_queue_size(2);
+        let qm = QueueManager::new(db.clone(), 1, None, vec![]).with_max_queue_size(2);
 
         let url1 = format!("{}/file.bin", server.uri());
         qm.add_download(
@@ -1257,7 +1278,7 @@ mod tests {
 
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3).with_max_queue_size(2);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]).with_max_queue_size(2);
 
         let url1 = format!("{}/file.bin", server.uri());
         let id1 = qm
@@ -1306,7 +1327,7 @@ mod tests {
     #[tokio::test]
     async fn test_queue_backpressure_default_limit() {
         let db = make_db();
-        let qm = QueueManager::new(db, 3);
+        let qm = QueueManager::new(db, 3, None, vec![]);
         assert_eq!(qm.max_queue_size, 1000);
     }
 
@@ -1317,7 +1338,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let _id1 = qm
@@ -1349,7 +1370,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let id1 = qm
@@ -1416,7 +1437,7 @@ mod tests {
 
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/rapid.bin", server.uri());
         let id = qm
@@ -1475,7 +1496,7 @@ mod tests {
 
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/slow-analyze.bin", server.uri());
 
@@ -1533,7 +1554,7 @@ mod tests {
 
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 1);
+        let qm = QueueManager::new(db.clone(), 1, None, vec![]);
 
         let url1 = format!("{}/fail-first.bin", server.uri());
         let id1 = qm
@@ -1591,7 +1612,7 @@ mod tests {
         let server = setup_server().await;
         let db = make_db();
         let tmp = TempDir::new().unwrap();
-        let qm = QueueManager::new(db.clone(), 3);
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
 
         let url = format!("{}/file.bin", server.uri());
         let id = qm
