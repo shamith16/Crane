@@ -1631,4 +1631,37 @@ mod tests {
         assert_eq!(qm.active_count().await, 0);
         assert!(matches!(db.get_download(&id), Err(CraneError::NotFound(_))));
     }
+
+    // ── Test: bandwidth limit doesn't break download flow ──
+
+    #[tokio::test]
+    async fn bandwidth_limit_slows_queue_downloads() {
+        let server = setup_server().await;
+        let temp = TempDir::new().unwrap();
+        let db = Arc::new(Database::open_in_memory().unwrap());
+
+        // 10KB/s bandwidth limit for a 1KB file
+        let queue = QueueManager::new(db.clone(), 1, Some(10_000), vec![]);
+
+        let id = queue
+            .add_download(
+                &format!("{}/file.bin", server.uri()),
+                temp.path().to_str().unwrap(),
+                DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // Wait for completion (poll every 100ms, up to 10s)
+        for _ in 0..100 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let completed = queue.check_completed().await.unwrap();
+            if completed.contains(&id) {
+                break;
+            }
+        }
+
+        let dl = db.get_download(&id).unwrap();
+        assert_eq!(dl.status, DownloadStatus::Completed);
+    }
 }
