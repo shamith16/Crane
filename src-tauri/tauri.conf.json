@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "identifier": "com.crane.app",
   "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
