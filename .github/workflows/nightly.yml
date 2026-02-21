@@ -81,13 +81,6 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
       - name: Build nightly
         uses: tauri-apps/tauri-action@v0
         env:

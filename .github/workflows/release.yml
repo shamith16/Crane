@@ -33,13 +33,6 @@ jobs:
             .
             src-tauri
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
       - name: Build and release (signed)
         if: env.HAS_APPLE_CERT == 'true'
         uses: tauri-apps/tauri-action@v0
@@ -93,13 +86,6 @@ jobs:
           workspaces: |
             .
             src-tauri
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
 
       - name: Build and release (signed)
         if: env.HAS_APPLE_CERT == 'true'
@@ -158,13 +144,6 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -190,13 +169,6 @@ jobs:
           workspaces: |
             .
             src-tauri
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
