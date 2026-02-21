@@ -12,6 +12,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use super::download::{MAX_RETRIES, PROGRESS_INTERVAL_MS, RETRY_BACKOFF_MS, USER_AGENT};
+use crate::bandwidth::BandwidthLimiter;
 use crate::metadata::analyzer::analyze_url;
 use crate::network::safe_redirect_policy;
 use crate::types::{
@@ -43,6 +44,8 @@ struct DownloadController {
     last_polled_time: std::sync::Mutex<Instant>,
     /// EMA-smoothed speed to avoid jittery display.
     smoothed_speed: std::sync::Mutex<f64>,
+    /// Shared bandwidth limiter (None = unlimited).
+    limiter: Option<Arc<BandwidthLimiter>>,
 }
 
 /// Handle returned by [`start_download`] that allows pausing, resuming, and
@@ -261,6 +264,7 @@ pub async fn start_download<F>(
     save_path: &Path,
     options: &DownloadOptions,
     on_progress: F,
+    limiter: Option<Arc<BandwidthLimiter>>,
 ) -> Result<DownloadHandle, CraneError>
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
@@ -307,6 +311,7 @@ where
         last_polled_bytes: AtomicU64::new(0),
         last_polled_time: std::sync::Mutex::new(Instant::now()),
         smoothed_speed: std::sync::Mutex::new(0.0),
+        limiter,
     });
 
     // Spawn initial download task
@@ -507,6 +512,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
             .and_then(|f| f.to_str())
             .unwrap_or("")
             .to_string();
+        let limiter = ctrl.limiter.clone();
 
         join_set.spawn(async move {
             download_chunk_resume(
@@ -520,6 +526,7 @@ async fn run_multi_download(ctrl: &DownloadController) -> Result<DownloadResult,
                 chunk.connection_num,
                 already,
                 &fname,
+                &limiter,
             )
             .await
         });
@@ -682,6 +689,7 @@ async fn download_chunk_resume(
     original_conn_num: u32,
     already_downloaded: u64,
     expected_filename: &str,
+    limiter: &Option<Arc<BandwidthLimiter>>,
 ) -> Result<u64, CraneError> {
     let chunk_path = temp_dir.join(format!("chunk_{original_conn_num}"));
     let mut last_error: Option<CraneError> = None;
@@ -768,6 +776,9 @@ async fn download_chunk_resume(
                             file.write_all(&bytes).await?;
                             downloaded += bytes.len() as u64;
                             counter.store(downloaded, Ordering::Relaxed);
+                            if let Some(ref lim) = *limiter {
+                                lim.acquire(bytes.len() as u64).await;
+                            }
                         }
                         Some(Err(e)) => {
                             stream_err = Some(CraneError::Network(e));
@@ -846,12 +857,14 @@ async fn run_single_download(ctrl: &DownloadController) -> Result<DownloadResult
     };
 
     let on_progress = ctrl.on_progress.clone();
+    let limiter = ctrl.limiter.clone();
     let result = super::download::download_file_with_token(
         &ctrl.url,
         &ctrl.save_path,
         &ctrl.options,
         move |p| on_progress(p),
         cancel_token,
+        limiter,
     )
     .await;
 
@@ -931,6 +944,7 @@ async fn download_chunk(
     counter: Arc<AtomicU64>,
     cancel_token: CancellationToken,
     expected_filename: &str,
+    limiter: &Option<Arc<BandwidthLimiter>>,
 ) -> Result<u64, CraneError> {
     let chunk_path = temp_dir.join(format!("chunk_{}", chunk.connection_num));
     let mut last_error: Option<CraneError> = None;
@@ -1004,6 +1018,9 @@ async fn download_chunk(
                             file.write_all(&bytes).await?;
                             downloaded += bytes.len() as u64;
                             counter.store(downloaded, Ordering::Relaxed);
+                            if let Some(ref lim) = *limiter {
+                                lim.acquire(bytes.len() as u64).await;
+                            }
                         }
                         Some(Err(e)) => {
                             stream_err = Some(CraneError::Network(e));
@@ -1080,6 +1097,7 @@ where
                 options,
                 on_progress,
                 cancel_token,
+                None,
             )
             .await;
         } else {
@@ -1209,7 +1227,7 @@ where
 
         join_set.spawn(async move {
             download_chunk(
-                &client, &url, &chunk, &temp_dir, &options, counter, token, &fname,
+                &client, &url, &chunk, &temp_dir, &options, counter, token, &fname, &None,
             )
             .await
         });
@@ -1940,6 +1958,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1984,6 +2003,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2076,6 +2096,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2126,6 +2147,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2165,6 +2187,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2207,6 +2230,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2263,6 +2287,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2525,6 +2550,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2581,6 +2607,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2713,6 +2740,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2780,6 +2808,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();

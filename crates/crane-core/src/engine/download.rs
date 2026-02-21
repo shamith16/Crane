@@ -8,6 +8,9 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use std::sync::Arc;
+
+use crate::bandwidth::BandwidthLimiter;
 use crate::network::safe_redirect_policy;
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult};
 
@@ -54,6 +57,7 @@ async fn attempt_download<F>(
     on_progress: &F,
     start_time: Instant,
     cancel_token: &CancellationToken,
+    limiter: &Option<Arc<BandwidthLimiter>>,
 ) -> Result<(u64, Option<u64>), CraneError>
 where
     F: Fn(&DownloadProgress) + Send + Sync,
@@ -106,6 +110,9 @@ where
                     Some(Ok(chunk)) => {
                         file.write_all(&chunk).await?;
                         downloaded += chunk.len() as u64;
+                        if let Some(ref lim) = *limiter {
+                            lim.acquire(chunk.len() as u64).await;
+                        }
 
                         // Update speed with EMA smoothing every 1 second
                         let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
@@ -193,6 +200,7 @@ pub(crate) async fn download_file_with_token<F>(
     options: &DownloadOptions,
     on_progress: F,
     cancel_token: CancellationToken,
+    limiter: Option<Arc<BandwidthLimiter>>,
 ) -> Result<DownloadResult, CraneError>
 where
     F: Fn(&DownloadProgress) + Send + Sync,
@@ -232,6 +240,7 @@ where
             &on_progress,
             start,
             &cancel_token,
+            &limiter,
         )
         .await
         {
@@ -307,6 +316,7 @@ where
         options,
         on_progress,
         CancellationToken::new(),
+        None,
     )
     .await
 }

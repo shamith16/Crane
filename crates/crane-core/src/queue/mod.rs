@@ -416,7 +416,7 @@ impl QueueManager {
 
         let on_progress = move |_progress: &DownloadProgress| {};
 
-        let handle = start_download(&url, save_path, options, on_progress).await?;
+        let handle = start_download(&url, save_path, options, on_progress, None).await?;
 
         self.db
             .update_download_status(id, DownloadStatus::Downloading, None, None)?;
