@@ -354,6 +354,7 @@ where
                     resume_from,
                     cancel_token,
                     on_progress,
+                    inner2.limiter.clone(),
                 )
                 .await;
             if let Err(ref e) = result {
@@ -1068,6 +1069,7 @@ pub async fn download<F>(
     save_path: &Path,
     options: &DownloadOptions,
     on_progress: F,
+    limiter: Option<Arc<BandwidthLimiter>>,
 ) -> Result<DownloadResult, CraneError>
 where
     F: Fn(&DownloadProgress) + Send + Sync + 'static,
@@ -1097,7 +1099,7 @@ where
                 options,
                 on_progress,
                 cancel_token,
-                None,
+                limiter,
             )
             .await;
         } else {
@@ -1105,7 +1107,7 @@ where
             let on_progress_arc: Arc<dyn Fn(&DownloadProgress) + Send + Sync> =
                 Arc::new(on_progress);
             return handler
-                .download(url, save_path, options, 0, cancel_token, on_progress_arc)
+                .download(url, save_path, options, 0, cancel_token, on_progress_arc, limiter)
                 .await;
         }
     }
@@ -1449,6 +1451,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1534,6 +1537,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1565,6 +1569,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1610,6 +1615,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await;
 
@@ -1648,6 +1654,7 @@ mod tests {
             move |p: &DownloadProgress| {
                 log_clone.lock().unwrap().push(p.clone());
             },
+            None,
         )
         .await
         .unwrap();
@@ -1685,6 +1692,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1718,6 +1726,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1795,6 +1804,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1838,6 +1848,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -1875,6 +1886,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await;
 
@@ -1927,6 +1939,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2337,6 +2350,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await;
 
@@ -2431,6 +2445,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await;
 
@@ -2512,6 +2527,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2668,6 +2684,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();
@@ -2708,6 +2725,7 @@ mod tests {
             &save,
             &opts,
             noop_progress,
+            None,
         )
         .await
         .unwrap();

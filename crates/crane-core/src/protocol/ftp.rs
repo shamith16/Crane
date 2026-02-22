@@ -8,6 +8,7 @@ use crate::metadata::mime::categorize_extension;
 use crate::metadata::sanitize_filename;
 use crate::network::is_public_host;
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult, UrlAnalysis};
+use crate::bandwidth::BandwidthLimiter;
 
 use super::ProtocolHandler;
 
@@ -124,7 +125,7 @@ const FTP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 /// binary mode. It handles resume, streaming, progress, finalize, and rename.
 macro_rules! ftp_download_stream {
     ($ftp:ident, $parts:expr, $save_path:expr, $resume_from:expr,
-     $cancel_token:expr, $on_progress:expr) => {{
+     $cancel_token:expr, $on_progress:expr, $limiter:expr) => {{
         use futures_util::io::AsyncReadExt;
         use tokio::io::AsyncWriteExt;
 
@@ -185,6 +186,12 @@ macro_rules! ftp_download_stream {
             }
 
             file.write_all(&buf[..n]).await?;
+
+            // Bandwidth limiting
+            if let Some(ref lim) = $limiter {
+                lim.acquire(n as u64).await;
+            }
+
             downloaded += n as u64;
 
             // Report progress
@@ -282,6 +289,7 @@ impl ProtocolHandler for FtpHandler {
         resume_from: u64,
         cancel_token: CancellationToken,
         on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync>,
+        limiter: Option<Arc<BandwidthLimiter>>,
     ) -> Result<DownloadResult, CraneError> {
         use suppaftp::types::FileType;
 
@@ -352,7 +360,8 @@ impl ProtocolHandler for FtpHandler {
                             save_path,
                             resume_from,
                             cancel_token,
-                            on_progress
+                            on_progress,
+                            limiter
                         )
                     }
                     Err(e) => Err(e),
@@ -384,7 +393,8 @@ impl ProtocolHandler for FtpHandler {
                             save_path,
                             resume_from,
                             cancel_token,
-                            on_progress
+                            on_progress,
+                            limiter
                         )
                     }
                     Err(e) => Err(e),
@@ -599,6 +609,7 @@ mod tests {
                 0,
                 CancellationToken::new(),
                 Arc::new(|_| {}),
+                None,
             )
             .await;
         assert!(result.is_err());

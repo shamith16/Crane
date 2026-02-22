@@ -7,6 +7,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 
+use crate::bandwidth::BandwidthLimiter;
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult, UrlAnalysis};
 
 #[async_trait]
@@ -21,6 +22,7 @@ pub trait ProtocolHandler: Send + Sync {
         resume_from: u64,
         cancel_token: CancellationToken,
         on_progress: Arc<dyn Fn(&DownloadProgress) + Send + Sync>,
+        limiter: Option<Arc<BandwidthLimiter>>,
     ) -> Result<DownloadResult, CraneError>;
 
     fn supports_multi_connection(&self) -> bool;
