@@ -13,6 +13,13 @@
     </div>
   </header>
 
+  <div id="version-info">
+    <span id="version-text"></span>
+  </div>
+  <div id="version-warning" class="warning hidden">
+    Version mismatch — update extension or native host
+  </div>
+
   <section class="setting">
     <label for="toggle-enabled">Intercept downloads</label>
     <label class="toggle">
@@ -30,6 +37,16 @@
       <input type="radio" name="captureMode" value="context-menu" id="mode-context">
       Context menu only
     </label>
+  </section>
+
+  <section class="setting">
+    <label for="min-file-size">Min file size</label>
+    <select id="min-file-size">
+      <option value="0">No minimum</option>
+      <option value="102400">100 KB</option>
+      <option value="1048576">1 MB</option>
+      <option value="10485760">10 MB</option>
+    </select>
   </section>
 
   <script src="popup.js"></script>

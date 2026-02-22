@@ -4,9 +4,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const modeContext = document.getElementById("mode-context");
   const statusDot = document.getElementById("status-dot");
   const statusText = document.getElementById("status-text");
+  const versionText = document.getElementById("version-text");
+  const versionWarning = document.getElementById("version-warning");
+  const minFileSizeSelect = document.getElementById("min-file-size");
+
+  const extVersion = chrome.runtime.getManifest().version;
 
   // Load saved settings
-  const defaults = { enabled: true, captureMode: "all" };
+  const defaults = { enabled: true, captureMode: "all", minFileSize: 1_048_576 };
   const settings = await chrome.storage.local.get(defaults);
 
   toggleEnabled.checked = settings.enabled;
@@ -15,15 +20,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     modeAll.checked = true;
   }
+  minFileSizeSelect.value = String(settings.minFileSize);
 
-  // Ping native host to check connection status
+  // Ping native host to check connection and version
   chrome.runtime.sendMessage({ type: "ping-native" }, (response) => {
     if (chrome.runtime.lastError || !response || !response.connected) {
       statusDot.classList.remove("connected");
       statusText.textContent = "Disconnected";
+      versionText.textContent = `Extension v${extVersion}`;
     } else {
       statusDot.classList.add("connected");
       statusText.textContent = "Connected";
+
+      const hostVersion = response.response?.version || "unknown";
+      versionText.textContent = `Extension v${extVersion} · Host v${hostVersion}`;
+
+      if (hostVersion !== extVersion && hostVersion !== "unknown") {
+        versionWarning.classList.remove("hidden");
+      }
     }
   });
 
@@ -43,5 +57,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (modeContext.checked) {
       chrome.storage.local.set({ captureMode: "context-menu" });
     }
+  });
+
+  // Save settings on min file size change
+  minFileSizeSelect.addEventListener("change", () => {
+    chrome.storage.local.set({ minFileSize: Number(minFileSizeSelect.value) });
   });
 });

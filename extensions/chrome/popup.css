@@ -116,3 +116,39 @@ h1 {
   accent-color: #3B82F6;
   margin: 0;
 }
+
+/* Version info */
+#version-info {
+  font-size: 11px;
+  color: #707070;
+  margin-bottom: 8px;
+}
+
+.warning {
+  font-size: 11px;
+  color: #FBBF24;
+  background: #1C1407;
+  border: 1px solid #78350F;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Select dropdown */
+select {
+  background: #1F1F1F;
+  color: #E8E8E8;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: 1px solid #3B82F6;
+}
