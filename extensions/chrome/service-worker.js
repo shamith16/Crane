@@ -9,7 +9,8 @@ async function getSettings() {
   try {
     const result = await chrome.storage.local.get(defaults);
     return result;
-  } catch {
+  } catch (e) {
+    console.warn("[crane] Failed to read settings, using defaults:", e);
     return defaults;
   }
 }
@@ -40,8 +41,8 @@ function filenameFromUrl(url) {
     if (segments.length > 0) {
       return decodeURIComponent(segments[segments.length - 1]);
     }
-  } catch {
-    // ignore malformed URLs
+  } catch (e) {
+    console.warn("[crane] Malformed URL, using default filename:", e);
   }
   return "download";
 }
@@ -66,11 +67,12 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
   }
 
   // Pause the browser download while we hand off to Crane
+  let paused = true;
   try {
     await chrome.downloads.pause(downloadItem.id);
-  } catch {
-    // Download may have already completed or been removed
-    return;
+  } catch (e) {
+    console.warn("[crane] Could not pause download, will still try Crane:", e);
+    paused = false;
   }
 
   try {
@@ -84,19 +86,34 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     });
 
     if (response && response.type === "accepted") {
-      // Crane accepted the download — cancel and erase the browser copy
-      await chrome.downloads.cancel(downloadItem.id);
-      await chrome.downloads.erase({ id: downloadItem.id });
+      // Crane accepted — cancel and erase the browser copy
+      try {
+        await chrome.downloads.cancel(downloadItem.id);
+        await chrome.downloads.erase({ id: downloadItem.id });
+      } catch (e) {
+        // Download may have already completed; best-effort cleanup
+        console.warn("[crane] Could not cancel/erase browser download:", e);
+      }
     } else {
       // Crane rejected or returned unexpected response — resume in browser
-      await chrome.downloads.resume(downloadItem.id);
+      console.warn("[crane] Crane did not accept download:", response);
+      if (paused) {
+        try {
+          await chrome.downloads.resume(downloadItem.id);
+        } catch (e) {
+          console.warn("[crane] Could not resume browser download:", e);
+        }
+      }
     }
-  } catch {
+  } catch (e) {
     // Native host unavailable — fall back to browser download
-    try {
-      await chrome.downloads.resume(downloadItem.id);
-    } catch {
-      // Download may have already been removed; nothing we can do
+    console.error("[crane] Native host unavailable, falling back to browser:", e);
+    if (paused) {
+      try {
+        await chrome.downloads.resume(downloadItem.id);
+      } catch (e2) {
+        console.warn("[crane] Could not resume browser download after fallback:", e2);
+      }
     }
   }
 });
@@ -134,8 +151,9 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
       mimeType: "",
       referrer: info.pageUrl || "",
     });
-  } catch {
+  } catch (e) {
     // Native host unavailable — fall back to browser download
+    console.error("[crane] Native host unavailable for context menu download:", e);
     chrome.downloads.download({ url });
   }
 });
