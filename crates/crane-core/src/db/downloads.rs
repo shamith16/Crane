@@ -239,6 +239,19 @@ impl Database {
         Ok(count > 0)
     }
 
+    /// Find the ID of an active download with the given URL, if one exists.
+    pub fn find_active_download_id(&self, url: &str) -> Result<Option<String>, CraneError> {
+        let conn = self.conn();
+        let id: Option<String> = conn
+            .query_row(
+                "SELECT id FROM downloads WHERE url = ?1 AND status IN ('pending', 'analyzing', 'downloading', 'queued', 'paused') LIMIT 1",
+                params![url],
+                |row| row.get(0),
+            )
+            .ok();
+        Ok(id)
+    }
+
     /// Update the status of a download. Also sets:
     /// - `updated_at` to now
     /// - `completed_at` when status is Completed

@@ -219,6 +219,27 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
         .and_then(|v| v.as_str())
         .map(filter_sensitive_cookies);
 
+    let authorization = msg
+        .get("authorization")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let headers = if let Some(ref auth) = authorization {
+        let mut map = std::collections::HashMap::new();
+        map.insert("Authorization".to_string(), auth.clone());
+        serde_json::to_string(&map).ok()
+    } else {
+        None
+    };
+
+    // Dedup: return existing download if same URL is already pending/active
+    if let Ok(Some(id)) = db.find_active_download_id(url_str) {
+        return serde_json::json!({
+            "type": "accepted",
+            "downloadId": id
+        });
+    }
+
     let category = categorize_mime(mime_type.as_deref());
 
     let save_path = PathBuf::from(save_dir).join(&filename);
@@ -245,7 +266,7 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
         referrer,
         cookies,
         user_agent: None,
-        headers: None,
+        headers,
         queue_position: None,
         retry_count: 0,
         created_at: now.clone(),
@@ -657,5 +678,66 @@ mod tests {
         assert!(!stored_cookies.contains("session"));
         assert!(!stored_cookies.contains("token"));
         assert!(stored_cookies.contains("theme=dark"));
+    }
+
+    #[test]
+    fn test_handle_download_stores_authorization_header() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://example.com/private.zip",
+            "filename": "private.zip",
+            "authorization": "Bearer my-secret-token"
+        });
+
+        let response = handle_message(&msg, &db, "/downloads");
+        assert_eq!(response["type"], "accepted");
+
+        let download_id = response["downloadId"].as_str().unwrap();
+        let dl = db.get_download(download_id).unwrap();
+        let headers: std::collections::HashMap<String, String> =
+            serde_json::from_str(dl.headers.as_ref().unwrap()).unwrap();
+        assert_eq!(headers.get("Authorization").unwrap(), "Bearer my-secret-token");
+    }
+
+    #[test]
+    fn test_handle_download_dedup_pending() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://example.com/file.zip",
+            "filename": "file.zip"
+        });
+
+        let r1 = handle_message(&msg, &db, "/downloads");
+        assert_eq!(r1["type"], "accepted");
+        let id1 = r1["downloadId"].as_str().unwrap().to_string();
+
+        let r2 = handle_message(&msg, &db, "/downloads");
+        assert_eq!(r2["type"], "accepted");
+        let id2 = r2["downloadId"].as_str().unwrap().to_string();
+
+        assert_eq!(id1, id2, "Should return same download ID for duplicate URL");
+    }
+
+    #[test]
+    fn test_handle_download_no_dedup_after_completion() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://example.com/file.zip",
+            "filename": "file.zip"
+        });
+
+        let r1 = handle_message(&msg, &db, "/downloads");
+        let id1 = r1["downloadId"].as_str().unwrap().to_string();
+
+        db.update_download_status(&id1, DownloadStatus::Completed, None, None).unwrap();
+
+        let r2 = handle_message(&msg, &db, "/downloads");
+        assert_eq!(r2["type"], "accepted");
+        let id2 = r2["downloadId"].as_str().unwrap().to_string();
+
+        assert_ne!(id1, id2, "Should create new download after completion");
     }
 }
