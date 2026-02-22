@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  /* ─── Colors ──────────────────────────────── */
+  --color-page: #0A0F1C;
+  --color-inset: #0F172A;
+  --color-surface: #1E293B;
+  --color-hover: #263148;
+
+  --color-accent: #22D3EE;
+  --color-accent-muted: #0E7490;
+
+  --color-primary: #FFFFFF;
+  --color-secondary: #94A3B8;
+  --color-tertiary: #64748B;
+  --color-muted: #475569;
+  --color-inverted: #0A0F1C;
+
+  --color-border: #1E293B;
+  --color-divider: #0F172A;
+
+  --color-error: #F87171;
+  --color-success: #34D399;
+  --color-warning: #FBBF24;
+
+  /* ─── Border Radius ───────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ─── Spacing (extends default scale) ─────── */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+}
+
+/* ─── Base Styles ───────────────────────────── */
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-page);
+  color: var(--color-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent text selection drag in Tauri window */
+  user-select: none;
+  /* Prevent overscroll bounce on macOS */
+  overscroll-behavior: none;
+}
+
+/* Re-enable text selection where needed */
+input, textarea, [data-selectable] {
+  user-select: text;
+}
