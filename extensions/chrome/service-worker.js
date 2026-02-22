@@ -38,7 +38,7 @@ setInterval(() => {
  * Returns { enabled: boolean, captureMode: "all" | "context-menu" }.
  */
 async function getSettings() {
-  const defaults = { enabled: true, captureMode: "all" };
+  const defaults = { enabled: true, captureMode: "all", minFileSize: 1_048_576 };
   try {
     const result = await chrome.storage.local.get(defaults);
     return result;
@@ -115,6 +115,12 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
 
   // Skip non-HTTP(S) URLs (data:, blob:, etc.)
   if (!url || url.startsWith("data:") || url.startsWith("blob:")) {
+    return;
+  }
+
+  // Skip small files (browser handles them fine)
+  // fileSize may be 0/-1 when unknown — still send those to Crane
+  if (settings.minFileSize > 0 && downloadItem.fileSize > 0 && downloadItem.fileSize < settings.minFileSize) {
     return;
   }
 
