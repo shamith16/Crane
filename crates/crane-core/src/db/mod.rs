@@ -54,105 +54,159 @@ impl Database {
         self.conn.lock().expect("Database mutex poisoned")
     }
 
-    /// Set pragmas and create all tables + indexes.
+    /// Set pragmas, create version table, and run migrations.
     fn setup(&self) -> Result<(), CraneError> {
         let conn = self.conn();
         conn.execute_batch("PRAGMA journal_mode=WAL;")
             .map_err(|e| CraneError::Database(e.to_string()))?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")
             .map_err(|e| CraneError::Database(e.to_string()))?;
-        drop(conn);
 
-        self.create_tables()?;
+        // Create version tracking table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);",
+        )
+        .map_err(|e| CraneError::Database(e.to_string()))?;
+
+        run_migrations(&conn)?;
         Ok(())
     }
+}
 
-    fn create_tables(&self) -> Result<(), CraneError> {
-        self.conn()
-            .execute_batch(
-                "
-            CREATE TABLE IF NOT EXISTS downloads (
-                id             TEXT PRIMARY KEY,
-                url            TEXT NOT NULL,
-                filename       TEXT NOT NULL,
-                save_path      TEXT NOT NULL,
-                total_size     INTEGER,
-                downloaded_size INTEGER NOT NULL DEFAULT 0,
-                status         TEXT NOT NULL DEFAULT 'pending',
-                error_message  TEXT,
-                error_code     TEXT,
-                mime_type      TEXT,
-                category       TEXT NOT NULL DEFAULT 'other',
-                resumable      INTEGER NOT NULL DEFAULT 0,
-                connections    INTEGER NOT NULL DEFAULT 1,
-                speed          REAL NOT NULL DEFAULT 0.0,
-                source_domain  TEXT,
-                referrer       TEXT,
-                cookies        TEXT,
-                user_agent     TEXT,
-                queue_position INTEGER,
-                retry_count    INTEGER NOT NULL DEFAULT 0,
-                created_at     TEXT NOT NULL,
-                started_at     TEXT,
-                completed_at   TEXT,
-                updated_at     TEXT NOT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_downloads_status
-                ON downloads(status);
-            CREATE INDEX IF NOT EXISTS idx_downloads_category
-                ON downloads(category);
-            CREATE INDEX IF NOT EXISTS idx_downloads_created
-                ON downloads(created_at DESC);
-
-            CREATE TABLE IF NOT EXISTS connections (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                download_id     TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
-                connection_num  INTEGER NOT NULL,
-                range_start     INTEGER NOT NULL,
-                range_end       INTEGER NOT NULL,
-                downloaded      INTEGER NOT NULL DEFAULT 0,
-                status          TEXT NOT NULL DEFAULT 'pending',
-                temp_file       TEXT,
-                UNIQUE(download_id, connection_num)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_connections_download
-                ON connections(download_id);
-
-            CREATE TABLE IF NOT EXISTS speed_history (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                download_id TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
-                speed       REAL NOT NULL,
-                timestamp   TEXT NOT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_speed_download
-                ON speed_history(download_id, timestamp);
-
-            CREATE TABLE IF NOT EXISTS retry_log (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                download_id   TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
-                attempt       INTEGER NOT NULL,
-                error_message TEXT,
-                error_code    TEXT,
-                timestamp     TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS site_settings (
-                domain      TEXT PRIMARY KEY,
-                connections INTEGER,
-                save_folder TEXT,
-                category    TEXT,
-                user_agent  TEXT,
-                created_at  TEXT NOT NULL
-            );
-            ",
-            )
-            .map_err(|e| CraneError::Database(e.to_string()))?;
-
-        Ok(())
+fn get_schema_version(conn: &Connection) -> Result<i64, CraneError> {
+    match conn.query_row(
+        "SELECT version FROM schema_version LIMIT 1",
+        [],
+        |row| row.get::<_, i64>(0),
+    ) {
+        Ok(v) => Ok(v),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+        Err(e) => Err(CraneError::Database(e.to_string())),
     }
+}
+
+fn set_schema_version(conn: &Connection, version: i64) -> Result<(), CraneError> {
+    conn.execute("DELETE FROM schema_version", [])
+        .map_err(|e| CraneError::Database(e.to_string()))?;
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [version])
+        .map_err(|e| CraneError::Database(e.to_string()))?;
+    Ok(())
+}
+
+fn run_migrations(conn: &Connection) -> Result<(), CraneError> {
+    let current = get_schema_version(conn)?;
+
+    let migrations: &[fn(&Connection) -> Result<(), CraneError>] = &[
+        migrate_v0_to_v1,
+    ];
+
+    for (i, migrate) in migrations.iter().enumerate() {
+        let target = (i + 1) as i64;
+        if current < target {
+            conn.execute_batch("BEGIN;")
+                .map_err(|e| CraneError::Database(e.to_string()))?;
+            match migrate(conn).and_then(|()| set_schema_version(conn, target)) {
+                Ok(()) => {
+                    conn.execute_batch("COMMIT;")
+                        .map_err(|e| CraneError::Database(e.to_string()))?;
+                    tracing::info!("[db] Migrated schema to version {target}");
+                }
+                Err(e) => {
+                    let _ = conn.execute_batch("ROLLBACK;");
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// V1: Initial schema — the original CREATE TABLE IF NOT EXISTS batch.
+fn migrate_v0_to_v1(conn: &Connection) -> Result<(), CraneError> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS downloads (
+            id             TEXT PRIMARY KEY,
+            url            TEXT NOT NULL,
+            filename       TEXT NOT NULL,
+            save_path      TEXT NOT NULL,
+            total_size     INTEGER,
+            downloaded_size INTEGER NOT NULL DEFAULT 0,
+            status         TEXT NOT NULL DEFAULT 'pending',
+            error_message  TEXT,
+            error_code     TEXT,
+            mime_type      TEXT,
+            category       TEXT NOT NULL DEFAULT 'other',
+            resumable      INTEGER NOT NULL DEFAULT 0,
+            connections    INTEGER NOT NULL DEFAULT 1,
+            speed          REAL NOT NULL DEFAULT 0.0,
+            source_domain  TEXT,
+            referrer       TEXT,
+            cookies        TEXT,
+            user_agent     TEXT,
+            queue_position INTEGER,
+            retry_count    INTEGER NOT NULL DEFAULT 0,
+            created_at     TEXT NOT NULL,
+            started_at     TEXT,
+            completed_at   TEXT,
+            updated_at     TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_downloads_status
+            ON downloads(status);
+        CREATE INDEX IF NOT EXISTS idx_downloads_category
+            ON downloads(category);
+        CREATE INDEX IF NOT EXISTS idx_downloads_created
+            ON downloads(created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS connections (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            download_id     TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+            connection_num  INTEGER NOT NULL,
+            range_start     INTEGER NOT NULL,
+            range_end       INTEGER NOT NULL,
+            downloaded      INTEGER NOT NULL DEFAULT 0,
+            status          TEXT NOT NULL DEFAULT 'pending',
+            temp_file       TEXT,
+            UNIQUE(download_id, connection_num)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_connections_download
+            ON connections(download_id);
+
+        CREATE TABLE IF NOT EXISTS speed_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            download_id TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+            speed       REAL NOT NULL,
+            timestamp   TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_speed_download
+            ON speed_history(download_id, timestamp);
+
+        CREATE TABLE IF NOT EXISTS retry_log (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            download_id   TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+            attempt       INTEGER NOT NULL,
+            error_message TEXT,
+            error_code    TEXT,
+            timestamp     TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS site_settings (
+            domain      TEXT PRIMARY KEY,
+            connections INTEGER,
+            save_folder TEXT,
+            category    TEXT,
+            user_agent  TEXT,
+            created_at  TEXT NOT NULL
+        );
+        ",
+    )
+    .map_err(|e| CraneError::Database(e.to_string()))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -180,6 +234,7 @@ mod tests {
                 "connections",
                 "downloads",
                 "retry_log",
+                "schema_version",
                 "site_settings",
                 "speed_history",
             ]
@@ -215,5 +270,131 @@ mod tests {
         drop(_db1);
         let _db2 = Database::open(&db_path).unwrap();
         // No error — tables already exist via IF NOT EXISTS
+    }
+
+    #[test]
+    fn test_fresh_db_has_schema_version_1() {
+        let db = Database::open_in_memory().unwrap();
+        let version: i64 = db
+            .conn()
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
+    }
+
+    #[test]
+    fn test_migration_is_idempotent() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("crane.db");
+
+        // Open once — runs migrations
+        let db1 = Database::open(&db_path).unwrap();
+        let v1: i64 = db1
+            .conn()
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        drop(db1);
+
+        // Open again — should not error, version stays the same
+        let db2 = Database::open(&db_path).unwrap();
+        let v2: i64 = db2
+            .conn()
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(v1, v2);
+        assert_eq!(v2, 1);
+    }
+
+    #[test]
+    fn test_existing_db_without_version_gets_migrated() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("crane.db");
+
+        // Simulate a pre-migration database: create tables manually without schema_version
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            conn.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+            conn.execute_batch(
+                "CREATE TABLE downloads (
+                    id TEXT PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    save_path TEXT NOT NULL,
+                    total_size INTEGER,
+                    downloaded_size INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    error_message TEXT,
+                    error_code TEXT,
+                    mime_type TEXT,
+                    category TEXT NOT NULL DEFAULT 'other',
+                    resumable INTEGER NOT NULL DEFAULT 0,
+                    connections INTEGER NOT NULL DEFAULT 1,
+                    speed REAL NOT NULL DEFAULT 0.0,
+                    source_domain TEXT,
+                    referrer TEXT,
+                    cookies TEXT,
+                    user_agent TEXT,
+                    queue_position INTEGER,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE connections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    download_id TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+                    connection_num INTEGER NOT NULL,
+                    range_start INTEGER NOT NULL,
+                    range_end INTEGER NOT NULL,
+                    downloaded INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    temp_file TEXT,
+                    UNIQUE(download_id, connection_num)
+                );
+                CREATE TABLE speed_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    download_id TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+                    speed REAL NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
+                CREATE TABLE retry_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    download_id TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+                    attempt INTEGER NOT NULL,
+                    error_message TEXT,
+                    error_code TEXT,
+                    timestamp TEXT NOT NULL
+                );
+                CREATE TABLE site_settings (
+                    domain TEXT PRIMARY KEY,
+                    connections INTEGER,
+                    save_folder TEXT,
+                    category TEXT,
+                    user_agent TEXT,
+                    created_at TEXT NOT NULL
+                );"
+            ).unwrap();
+        }
+
+        // Now open with Database::open — should detect missing version, set to 1
+        let db = Database::open(&db_path).unwrap();
+        let version: i64 = db
+            .conn()
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
+
+        // Verify all 5 original tables still exist
+        let conn = db.conn();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('downloads','connections','speed_history','retry_log','site_settings')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 5);
     }
 }
