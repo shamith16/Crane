@@ -49,10 +49,9 @@ async function getSettings() {
 }
 
 /**
- * Send a message to the native messaging host and return the response.
- * Wraps chrome.runtime.sendNativeMessage in a Promise.
+ * Send a single message to the native messaging host.
  */
-function sendToNativeHost(message) {
+function sendToNativeHostOnce(message) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendNativeMessage(NATIVE_HOST, message, (response) => {
       if (chrome.runtime.lastError) {
@@ -62,6 +61,26 @@ function sendToNativeHost(message) {
       }
     });
   });
+}
+
+/**
+ * Send a message to the native host with retry on connection errors.
+ * Retries up to 2 times with 500ms delay. Does NOT retry if the host
+ * responded (even with an error response — that means it's reachable).
+ */
+async function sendToNativeHost(message, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await sendToNativeHostOnce(message);
+    } catch (e) {
+      if (attempt < maxRetries) {
+        console.warn(`[crane] Native host attempt ${attempt + 1} failed, retrying in 500ms:`, e);
+        await new Promise((r) => setTimeout(r, 500));
+      } else {
+        throw e;
+      }
+    }
+  }
 }
 
 /**
