@@ -18,9 +18,13 @@ impl ConfigManager {
             let contents = std::fs::read_to_string(path).map_err(|e| {
                 CraneError::Config(format!("Failed to read config at {}: {e}", path.display()))
             })?;
-            let config: AppConfig = toml::from_str(&contents).map_err(|e| {
+            let mut config: AppConfig = toml::from_str(&contents).map_err(|e| {
                 CraneError::Config(format!("Failed to parse config at {}: {e}", path.display()))
             })?;
+            let warnings = config.validate();
+            for w in &warnings {
+                eprintln!("[config] {w}");
+            }
             Ok(Self {
                 path: path.to_path_buf(),
                 config,
@@ -70,6 +74,10 @@ impl ConfigManager {
         merge_json(&mut current, partial);
         self.config = serde_json::from_value(current)
             .map_err(|e| CraneError::Config(format!("Failed to apply config update: {e}")))?;
+        let warnings = self.config.validate();
+        for w in &warnings {
+            eprintln!("[config] {w}");
+        }
         self.save()
     }
 
@@ -114,6 +122,10 @@ impl ConfigManager {
                 path.display()
             ))
         })?;
+        let warnings = self.config.validate();
+        for w in &warnings {
+            eprintln!("[config] {w}");
+        }
         self.save()
     }
 
