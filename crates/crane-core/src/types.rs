@@ -154,6 +154,7 @@ pub struct Download {
     pub referrer: Option<String>,
     pub cookies: Option<String>,
     pub user_agent: Option<String>,
+    pub headers: Option<String>,
     pub queue_position: Option<u32>,
     pub retry_count: u32,
     pub created_at: String,

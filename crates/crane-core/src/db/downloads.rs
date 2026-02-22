@@ -83,6 +83,9 @@ fn row_to_download(row: &rusqlite::Row) -> Result<Download, CraneError> {
         updated_at: row
             .get(23)
             .map_err(|e| CraneError::Database(e.to_string()))?,
+        headers: row
+            .get(24)
+            .map_err(|e| CraneError::Database(e.to_string()))?,
     })
 }
 
@@ -91,7 +94,7 @@ const SELECT_ALL_COLUMNS: &str =
      status, error_message, error_code, mime_type, category, resumable, \
      connections, speed, source_domain, referrer, cookies, user_agent, \
      queue_position, retry_count, created_at, started_at, completed_at, \
-     updated_at FROM downloads";
+     updated_at, headers FROM downloads";
 
 impl Database {
     /// Insert a new download record.
@@ -103,13 +106,13 @@ impl Database {
                     status, error_message, error_code, mime_type, category,
                     resumable, connections, speed, source_domain, referrer,
                     cookies, user_agent, queue_position, retry_count,
-                    created_at, started_at, completed_at, updated_at
+                    created_at, started_at, completed_at, updated_at, headers
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6,
                     ?7, ?8, ?9, ?10, ?11,
                     ?12, ?13, ?14, ?15, ?16,
                     ?17, ?18, ?19, ?20,
-                    ?21, ?22, ?23, ?24
+                    ?21, ?22, ?23, ?24, ?25
                 )",
                 params![
                     dl.id,
@@ -136,6 +139,7 @@ impl Database {
                     dl.started_at,
                     dl.completed_at,
                     dl.created_at, // updated_at = created_at initially
+                    dl.headers,
                 ],
             )
             .map_err(|e| CraneError::Database(e.to_string()))?;
@@ -451,6 +455,7 @@ mod tests {
             referrer: None,
             cookies: None,
             user_agent: None,
+            headers: None,
             queue_position: None,
             retry_count: 0,
             created_at: "2026-01-01T00:00:00Z".to_string(),

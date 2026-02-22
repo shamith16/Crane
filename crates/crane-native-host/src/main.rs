@@ -245,6 +245,7 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
         referrer,
         cookies,
         user_agent: None,
+        headers: None,
         queue_position: None,
         retry_count: 0,
         created_at: now.clone(),
