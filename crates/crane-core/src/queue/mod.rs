@@ -187,6 +187,7 @@ impl QueueManager {
                 referrer: dl.referrer.clone(),
                 cookies: dl.cookies.clone(),
                 user_agent: dl.user_agent.clone(),
+                headers: dl.headers.as_deref().and_then(|s| serde_json::from_str(s).ok()),
                 ..Default::default()
             };
             self.start_download_internal(id, &save_path, &options, &mut active)
@@ -283,6 +284,7 @@ impl QueueManager {
                 referrer: next.referrer.clone(),
                 cookies: next.cookies.clone(),
                 user_agent: next.user_agent.clone(),
+                headers: next.headers.as_deref().and_then(|s| serde_json::from_str(s).ok()),
                 ..Default::default()
             };
             self.start_download_internal(&next.id, &save_path, &options, active)
@@ -396,6 +398,7 @@ impl QueueManager {
                     referrer: dl.referrer.clone(),
                     cookies: dl.cookies.clone(),
                     user_agent: dl.user_agent.clone(),
+                    headers: dl.headers.as_deref().and_then(|s| serde_json::from_str(s).ok()),
                     ..Default::default()
                 };
                 match self
