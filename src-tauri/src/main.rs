@@ -53,6 +53,7 @@ fn main() {
             let max_concurrent = config_manager.get().downloads.max_concurrent;
             let bandwidth_limit = config_manager.get().downloads.bandwidth_limit;
             let speed_schedule = config_manager.get().network.speed_schedule.clone();
+            let auto_resume = config_manager.get().downloads.auto_resume;
 
             let config = Arc::new(tokio::sync::Mutex::new(config_manager));
 
@@ -63,6 +64,21 @@ fn main() {
                 bandwidth_limit,
                 speed_schedule,
             ));
+
+            // Auto-resume paused downloads if configured
+            if auto_resume {
+                let resume_queue = queue.clone();
+                tauri::async_runtime::spawn(async move {
+                    match resume_queue.resume_all().await {
+                        Ok(resumed) => {
+                            if !resumed.is_empty() {
+                                eprintln!("[startup] Auto-resumed {} paused downloads", resumed.len());
+                            }
+                        }
+                        Err(e) => eprintln!("[startup] Auto-resume error: {e}"),
+                    }
+                });
+            }
 
             // Spawn completion + pending monitor with notifications
             let monitor_queue = queue.clone();
