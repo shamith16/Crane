@@ -3,7 +3,8 @@
   "name": "Crane Download Manager",
   "version": "0.1.0",
   "description": "Intercept browser downloads and send them to Crane",
-  "permissions": ["downloads", "nativeMessaging", "contextMenus", "storage"],
+  "permissions": ["downloads", "nativeMessaging", "contextMenus", "storage", "webRequest"],
+  "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "service-worker.js" },
   "action": {
     "default_popup": "popup.html",

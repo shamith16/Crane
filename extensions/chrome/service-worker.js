@@ -1,5 +1,38 @@
 const NATIVE_HOST = "com.crane.dl";
 
+// ---------------------------------------------------------------------------
+// Authorization header cache
+// ---------------------------------------------------------------------------
+
+const authCache = new Map();
+const AUTH_CACHE_TTL_MS = 30_000;
+
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    if (!details.requestHeaders) return;
+    for (const header of details.requestHeaders) {
+      if (header.name.toLowerCase() === "authorization" && header.value) {
+        authCache.set(details.url, {
+          value: header.value,
+          timestamp: Date.now(),
+        });
+        break;
+      }
+    }
+  },
+  { urls: ["<all_urls>"] },
+  ["requestHeaders"]
+);
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [url, entry] of authCache) {
+    if (now - entry.timestamp > AUTH_CACHE_TTL_MS) {
+      authCache.delete(url);
+    }
+  }
+}, AUTH_CACHE_TTL_MS);
+
 /**
  * Read extension settings from chrome.storage.local.
  * Returns { enabled: boolean, captureMode: "all" | "context-menu" }.
@@ -75,6 +108,11 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     paused = false;
   }
 
+  // Look up cached Authorization header
+  const authEntry = authCache.get(url);
+  const authorization = authEntry ? authEntry.value : undefined;
+  if (authEntry) authCache.delete(url);
+
   try {
     const response = await sendToNativeHost({
       type: "download",
@@ -83,6 +121,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
       fileSize: downloadItem.fileSize || 0,
       mimeType: downloadItem.mime || "",
       referrer: downloadItem.referrer || "",
+      authorization,
     });
 
     if (response && response.type === "accepted") {
@@ -142,6 +181,11 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 
   const filename = filenameFromUrl(url);
 
+  // Look up cached Authorization header
+  const authEntry = authCache.get(url);
+  const authorization = authEntry ? authEntry.value : undefined;
+  if (authEntry) authCache.delete(url);
+
   try {
     await sendToNativeHost({
       type: "download",
@@ -150,6 +194,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
       fileSize: 0,
       mimeType: "",
       referrer: info.pageUrl || "",
+      authorization,
     });
   } catch (e) {
     // Native host unavailable — fall back to browser download
