@@ -281,15 +281,36 @@ fn main() {
         std::process::exit(1);
     });
 
-    // Determine save directory
-    let save_dir = dirs::download_dir()
-        .unwrap_or_else(|| {
-            dirs::home_dir()
-                .map(|h| h.join("Downloads"))
-                .unwrap_or_else(|| PathBuf::from("."))
-        })
-        .to_string_lossy()
-        .to_string();
+    // Determine save directory: prefer config, fall back to system default
+    let save_dir = {
+        let default_dir = || {
+            dirs::download_dir()
+                .unwrap_or_else(|| {
+                    dirs::home_dir()
+                        .map(|h| h.join("Downloads"))
+                        .unwrap_or_else(|| PathBuf::from("."))
+                })
+                .to_string_lossy()
+                .to_string()
+        };
+
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("crane");
+        let config_path = config_dir.join("config.toml");
+
+        match crane_core::config::ConfigManager::load(&config_path) {
+            Ok(cm) => {
+                let loc = &cm.get().general.download_location;
+                if loc.is_empty() {
+                    default_dir()
+                } else {
+                    loc.clone()
+                }
+            }
+            Err(_) => default_dir(),
+        }
+    };
 
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
@@ -592,6 +613,27 @@ mod tests {
 
         // All cookies are sensitive
         assert_eq!(filter_sensitive_cookies("session=abc; token=def"), "");
+    }
+
+    #[test]
+    fn test_handle_download_uses_provided_save_dir() {
+        let db = Database::open_in_memory().unwrap();
+        let msg = serde_json::json!({
+            "type": "download",
+            "url": "https://example.com/file.zip",
+            "filename": "file.zip"
+        });
+
+        let response = handle_message(&msg, &db, "/custom/save/dir");
+
+        assert_eq!(response["type"], "accepted");
+        let download_id = response["downloadId"].as_str().unwrap();
+        let dl = db.get_download(download_id).unwrap();
+        assert!(
+            dl.save_path.starts_with("/custom/save/dir"),
+            "Expected save_path to use provided dir, got: {}",
+            dl.save_path
+        );
     }
 
     #[test]
