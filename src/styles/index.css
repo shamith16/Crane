@@ -35,6 +35,28 @@
   --spacing-lg: 16px;
   --spacing-xl: 24px;
   --spacing-2xl: 32px;
+
+  /* ─── Typography ──────────────────────────── */
+  /* Semantic font sizes — change here, updates everywhere */
+  --text-caption: 11px;       /* status bar, labels, badges */
+  --text-body-sm: 12px;       /* secondary info, sidebar items */
+  --text-body: 13px;          /* default body text */
+  --text-body-lg: 14px;       /* prominent body text */
+  --text-heading-sm: 15px;    /* section headers */
+  --text-heading: 18px;       /* panel titles */
+  --text-heading-lg: 24px;    /* page titles */
+  --text-display: 32px;       /* hero/empty state */
+
+  /* Font weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Line heights */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
 }
 
 /* ─── Base Styles ───────────────────────────── */
