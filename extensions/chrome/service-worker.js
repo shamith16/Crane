@@ -84,6 +84,20 @@ async function sendToNativeHost(message, maxRetries = 2) {
 }
 
 /**
+ * Show a brief Chrome notification. Auto-clears after 3 seconds.
+ */
+function showNotification(title, message) {
+  const id = `crane-${Date.now()}`;
+  chrome.notifications.create(id, {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title,
+    message,
+  });
+  setTimeout(() => chrome.notifications.clear(id), 3000);
+}
+
+/**
  * Extract a filename from a URL path, falling back to "download" if empty.
  */
 function filenameFromUrl(url) {
@@ -212,7 +226,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
   if (authEntry) authCache.delete(url);
 
   try {
-    await sendToNativeHost({
+    const response = await sendToNativeHost({
       type: "download",
       url,
       filename,
@@ -221,9 +235,17 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
       referrer: info.pageUrl || "",
       authorization,
     });
+
+    if (response && response.type === "accepted") {
+      showNotification("Crane", `Downloading ${filename}`);
+    } else {
+      console.warn("[crane] Crane did not accept context menu download:", response);
+      showNotification("Crane", `Falling back to browser for ${filename}`);
+      chrome.downloads.download({ url });
+    }
   } catch (e) {
-    // Native host unavailable — fall back to browser download
     console.error("[crane] Native host unavailable for context menu download:", e);
+    showNotification("Crane", `Falling back to browser for ${filename}`);
     chrome.downloads.download({ url });
   }
 });
