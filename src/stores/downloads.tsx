@@ -1,4 +1,4 @@
-import { createContext, useContext, type ParentComponent } from "solid-js";
+import { createContext, createSignal, useContext, type ParentComponent } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { isTauri, getDownloads, subscribeProgress } from "../lib/tauri";
 import { mockDownloads } from "../data/mockDownloads";
@@ -39,6 +39,14 @@ interface DownloadStore {
   activeCount: () => number;
   /** Get effective download with progress overlay */
   getEffective: DownloadStoreActions["getEffective"];
+  /** Currently selected download ID */
+  selectedDownloadId: () => string | null;
+  /** Set the selected download */
+  selectDownload: (id: string | null) => void;
+  /** The selected download (effective, with progress overlay) */
+  selectedDownload: () => Download | null;
+  /** Get live progress for a download */
+  getProgress: (id: string) => DownloadProgress | undefined;
 }
 
 // ── Status display order ───────────────────────
@@ -65,6 +73,8 @@ export const useDownloads = (): DownloadStore => {
 // ── Provider ───────────────────────────────────
 
 export const DownloadStoreProvider: ParentComponent = (props) => {
+  const [selectedDownloadId, setSelectedDownloadId] = createSignal<string | null>(null);
+
   const [state, setState] = createStore<DownloadStoreState>({
     downloads: [],
     progress: {},
@@ -204,6 +214,18 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
       (d) => d.status === "downloading" || d.status === "analyzing",
     ).length;
 
+  const selectDownload = (id: string | null) => setSelectedDownloadId(id);
+
+  const selectedDownload = (): Download | null => {
+    const id = selectedDownloadId();
+    if (!id) return null;
+    const dl = state.downloads.find((d) => d.id === id);
+    if (!dl) return null;
+    return getEffective(dl);
+  };
+
+  const getProgress = (id: string): DownloadProgress | undefined => state.progress[id];
+
   const store: DownloadStore = {
     state,
     downloadsByStatus,
@@ -213,6 +235,10 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     totalSpeed,
     activeCount,
     getEffective,
+    selectedDownloadId,
+    selectDownload,
+    selectedDownload,
+    getProgress,
   };
 
   return (

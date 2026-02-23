@@ -9,11 +9,12 @@ import {
   File,
 } from "lucide-solid";
 import type { Download, FileCategory } from "../../types/download";
+import { useDownloads } from "../../stores/downloads";
+import { useLayout } from "../layout/LayoutContext";
 import ProgressBar from "./ProgressBar";
 
 interface DownloadRowProps {
   download: Download;
-  selected?: boolean;
 }
 
 const categoryIcons: Record<FileCategory, typeof FileText> = {
@@ -63,9 +64,18 @@ function iconColor(status: Download["status"]): string {
 }
 
 const DownloadRow: Component<DownloadRowProps> = (props) => {
+  const { selectDownload, selectedDownloadId } = useDownloads();
+  const { setDetailPanelVisible } = useLayout();
+
   const dl = () => props.download;
   const icon = () => categoryIcons[dl().category] ?? File;
   const isActive = () => dl().status === "downloading" || dl().status === "analyzing";
+  const isSelected = () => selectedDownloadId() === dl().id;
+
+  const handleClick = () => {
+    selectDownload(dl().id);
+    setDetailPanelVisible(true);
+  };
 
   let nameRef!: HTMLParagraphElement;
   const [isOverflowing, setIsOverflowing] = createSignal(false);
@@ -98,8 +108,9 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
   return (
     <div
       class={`flex flex-col gap-[8px] rounded-md bg-surface p-[10px_12px] cursor-pointer transition-colors hover:bg-hover ${
-        props.selected ? "ring-1 ring-accent" : ""
+        isSelected() ? "ring-1 ring-accent" : ""
       }`}
+      onClick={handleClick}
     >
       {/* Top row: icon + info */}
       <div class="flex items-center gap-[10px]">
