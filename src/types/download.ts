@@ -69,3 +69,13 @@ export interface UrlAnalysis {
   category: FileCategory;
   server: string | null;
 }
+
+export interface DiskSpace {
+  free_bytes: number;
+  total_bytes: number;
+}
+
+export interface AppInfo {
+  version: string;
+  data_dir: string;
+}

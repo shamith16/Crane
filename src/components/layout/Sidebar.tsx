@@ -15,32 +15,34 @@ import {
   Settings,
 } from "lucide-solid";
 import { useLayout } from "./LayoutContext";
+import { useDownloads } from "../../stores/downloads";
 import SidebarItem from "../sidebar/SidebarItem";
 import SidebarSection from "../sidebar/SidebarSection";
 import SidebarLogo from "../sidebar/SidebarLogo";
 import SidebarDiskUsage from "../sidebar/SidebarDiskUsage";
 
 const statusFilters = [
-  { id: "all", label: "All Downloads", icon: Loader, count: 24 },
-  { id: "active", label: "Active", icon: Loader, count: 3 },
-  { id: "queued", label: "Queued", icon: Clock3, count: 5 },
-  { id: "completed", label: "Completed", icon: CircleCheck, count: 14 },
-  { id: "failed", label: "Failed", icon: CircleX, count: 1 },
-  { id: "paused", label: "Paused", icon: CirclePause, count: 1 },
+  { id: "all", label: "All Downloads", icon: Loader },
+  { id: "active", label: "Active", icon: Loader },
+  { id: "queued", label: "Queued", icon: Clock3 },
+  { id: "completed", label: "Completed", icon: CircleCheck },
+  { id: "failed", label: "Failed", icon: CircleX },
+  { id: "paused", label: "Paused", icon: CirclePause },
 ] as const;
 
 const categoryFilters = [
-  { id: "documents", label: "Documents", icon: FileText, count: 8 },
-  { id: "video", label: "Video", icon: Video, count: 4 },
-  { id: "audio", label: "Audio", icon: Music, count: 2 },
-  { id: "images", label: "Images", icon: Image, count: 3 },
-  { id: "archives", label: "Archives", icon: Archive, count: 5 },
-  { id: "software", label: "Software", icon: Package, count: 1 },
-  { id: "other", label: "Other", icon: File, count: 1 },
+  { id: "documents", label: "Documents", icon: FileText },
+  { id: "video", label: "Video", icon: Video },
+  { id: "audio", label: "Audio", icon: Music },
+  { id: "images", label: "Images", icon: Image },
+  { id: "archives", label: "Archives", icon: Archive },
+  { id: "software", label: "Software", icon: Package },
+  { id: "other", label: "Other", icon: File },
 ] as const;
 
 const Sidebar: Component = () => {
   const { sidebarExpanded, toggleSidebar } = useLayout();
+  const { statusCounts, categoryCounts } = useDownloads();
   const [activeFilter, setActiveFilter] = createSignal<string>("all");
 
   return (
@@ -65,7 +67,7 @@ const Sidebar: Component = () => {
               <SidebarItem
                 icon={() => <filter.icon size={18} />}
                 label={filter.label}
-                count={filter.count}
+                count={statusCounts()[filter.id] ?? 0}
                 active={activeFilter() === filter.id}
                 onClick={() => setActiveFilter(filter.id)}
               />
@@ -83,7 +85,7 @@ const Sidebar: Component = () => {
               <SidebarItem
                 icon={() => <filter.icon size={18} />}
                 label={filter.label}
-                count={filter.count}
+                count={categoryCounts()[filter.id] ?? 0}
                 active={activeFilter() === filter.id}
                 onClick={() => setActiveFilter(filter.id)}
               />
