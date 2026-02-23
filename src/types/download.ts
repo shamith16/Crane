@@ -70,6 +70,17 @@ export interface UrlAnalysis {
   server: string | null;
 }
 
+export interface DownloadOptions {
+  save_path?: string;
+  filename?: string;
+  connections?: number;
+  category?: FileCategory;
+  referrer?: string;
+  cookies?: string;
+  user_agent?: string;
+  headers?: Record<string, string>;
+}
+
 export interface DiskSpace {
   free_bytes: number;
   total_bytes: number;

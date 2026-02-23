@@ -2,6 +2,8 @@ import { invoke, Channel, isTauri } from "@tauri-apps/api/core";
 import type {
   Download,
   DownloadProgress,
+  DownloadOptions,
+  UrlAnalysis,
   DiskSpace,
   AppInfo,
 } from "../types/download";
@@ -26,6 +28,14 @@ export function subscribeProgress(
   channel.onmessage = onProgress;
   invoke("subscribe_progress", { downloadId, onProgress: channel });
   return channel;
+}
+
+export function analyzeUrl(url: string): Promise<UrlAnalysis> {
+  return invoke<UrlAnalysis>("analyze_url", { url });
+}
+
+export function addDownload(url: string, options?: DownloadOptions): Promise<string> {
+  return invoke<string>("add_download", { url, options: options ?? null });
 }
 
 // ── System ─────────────────────────────────────
