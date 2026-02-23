@@ -1,15 +1,16 @@
-import type { Component } from "solid-js";
+import { createSignal, Show, type Component } from "solid-js";
+import EmptyState from "../content/EmptyState";
 
 const ContentArea: Component = () => {
+  // Hardcoded for now — L6 will wire this to real download data
+  const [hasDownloads] = createSignal(false);
+
   return (
-    <div class="flex-1 overflow-y-auto p-lg">
-      {/* L4 (empty state) and L5 (download list) will fill this in */}
-      <div class="flex h-full items-center justify-center">
-        <div class="text-center">
-          <p class="text-heading text-secondary">Content Area</p>
-          <p class="text-body-sm text-muted mt-xs">Downloads will appear here</p>
-        </div>
-      </div>
+    <div class="flex-1 overflow-y-auto min-h-0">
+      <Show when={hasDownloads()} fallback={<EmptyState />}>
+        {/* L5 will add the download list here */}
+        <div />
+      </Show>
     </div>
   );
 };
