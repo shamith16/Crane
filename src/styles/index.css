@@ -80,3 +80,15 @@ html, body, #root {
 input, textarea, [data-selectable] {
   user-select: text;
 }
+
+/* ─── Animations ────────────────────────────── */
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Tailwind v4 custom utility */
+@utility animate-marquee {
+  animation: marquee 8s linear infinite;
+}
