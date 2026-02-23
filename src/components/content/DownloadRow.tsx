@@ -1,4 +1,4 @@
-import { Show, type Component } from "solid-js";
+import { createSignal, Show, type Component } from "solid-js";
 import {
   FileText,
   Video,
@@ -67,6 +67,15 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
   const icon = () => categoryIcons[dl().category] ?? File;
   const isActive = () => dl().status === "downloading" || dl().status === "analyzing";
 
+  let nameRef!: HTMLParagraphElement;
+  const [isOverflowing, setIsOverflowing] = createSignal(false);
+
+  const checkOverflow = () => {
+    if (nameRef) {
+      setIsOverflowing(nameRef.scrollWidth > nameRef.clientWidth);
+    }
+  };
+
   const percent = () => {
     if (!dl().total_size || dl().total_size === 0) return 0;
     return (dl().downloaded_size / dl().total_size!) * 100;
@@ -99,9 +108,12 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
         </span>
 
         <div class="flex flex-col gap-[2px] min-w-0 flex-1">
-          {/* Filename with marquee on hover */}
-          <div class="overflow-hidden group">
-            <p class="text-body font-medium text-primary truncate group-hover:animate-marquee group-hover:w-max">
+          {/* Filename — marquee only when text is actually truncated */}
+          <div class="overflow-hidden" onMouseEnter={checkOverflow} onMouseLeave={() => setIsOverflowing(false)}>
+            <p
+              ref={nameRef}
+              class={`text-body font-medium text-primary truncate ${isOverflowing() ? "animate-marquee !w-max" : ""}`}
+            >
               {dl().filename}
             </p>
           </div>
