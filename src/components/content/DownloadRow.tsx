@@ -64,17 +64,23 @@ function iconColor(status: Download["status"]): string {
 }
 
 const DownloadRow: Component<DownloadRowProps> = (props) => {
-  const { selectDownload, selectedDownloadId } = useDownloads();
+  const { selectedIds, selectOne, toggleSelect, rangeSelect } = useDownloads();
   const { setDetailPanelVisible } = useLayout();
 
   const dl = () => props.download;
   const icon = () => categoryIcons[dl().category] ?? File;
   const isActive = () => dl().status === "downloading" || dl().status === "analyzing";
-  const isSelected = () => selectedDownloadId() === dl().id;
+  const isSelected = () => selectedIds().has(dl().id);
 
-  const handleClick = () => {
-    selectDownload(dl().id);
-    setDetailPanelVisible(true);
+  const handleClick = (e: MouseEvent) => {
+    if (e.shiftKey) {
+      rangeSelect(dl().id);
+    } else if (e.metaKey || e.ctrlKey) {
+      toggleSelect(dl().id);
+    } else {
+      selectOne(dl().id);
+      setDetailPanelVisible(true);
+    }
   };
 
   let nameRef!: HTMLParagraphElement;

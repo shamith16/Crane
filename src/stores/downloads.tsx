@@ -39,12 +39,20 @@ interface DownloadStore {
   activeCount: () => number;
   /** Get effective download with progress overlay */
   getEffective: DownloadStoreActions["getEffective"];
-  /** Currently selected download ID */
-  selectedDownloadId: () => string | null;
-  /** Set the selected download */
-  selectDownload: (id: string | null) => void;
-  /** The selected download (effective, with progress overlay) */
+  /** Set of selected download IDs */
+  selectedIds: () => Set<string>;
+  /** Single-select: clears others, sets one, opens detail */
+  selectOne: (id: string | null) => void;
+  /** Toggle a single ID in/out of selection (Ctrl+click) */
+  toggleSelect: (id: string) => void;
+  /** Range select from last-clicked to target (Shift+click) */
+  rangeSelect: (id: string) => void;
+  /** Clear all selection */
+  clearSelection: () => void;
+  /** The single selected download for detail panel (only when exactly 1) */
   selectedDownload: () => Download | null;
+  /** All selected downloads (effective) */
+  selectedDownloads: () => Download[];
   /** Get live progress for a download */
   getProgress: (id: string) => DownloadProgress | undefined;
 }
@@ -73,7 +81,8 @@ export const useDownloads = (): DownloadStore => {
 // ── Provider ───────────────────────────────────
 
 export const DownloadStoreProvider: ParentComponent = (props) => {
-  const [selectedDownloadId, setSelectedDownloadId] = createSignal<string | null>(null);
+  const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
+  let lastClickedId: string | null = null;
 
   const [state, setState] = createStore<DownloadStoreState>({
     downloads: [],
@@ -214,14 +223,61 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
       (d) => d.status === "downloading" || d.status === "analyzing",
     ).length;
 
-  const selectDownload = (id: string | null) => setSelectedDownloadId(id);
+  const selectOne = (id: string | null) => {
+    if (id) {
+      setSelectedIds(new Set([id]));
+      lastClickedId = id;
+    } else {
+      setSelectedIds(new Set<string>());
+      lastClickedId = null;
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set<string>(selectedIds());
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+    lastClickedId = id;
+  };
+
+  const rangeSelect = (id: string) => {
+    if (!lastClickedId) {
+      selectOne(id);
+      return;
+    }
+    // Build flat ordered list of IDs from downloadsByStatus
+    const flatIds = state.downloads.map((d) => d.id);
+    const fromIdx = flatIds.indexOf(lastClickedId);
+    const toIdx = flatIds.indexOf(id);
+    if (fromIdx === -1 || toIdx === -1) {
+      selectOne(id);
+      return;
+    }
+    const start = Math.min(fromIdx, toIdx);
+    const end = Math.max(fromIdx, toIdx);
+    const next = new Set<string>(selectedIds());
+    for (let i = start; i <= end; i++) next.add(flatIds[i]);
+    setSelectedIds(next);
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set<string>());
+    lastClickedId = null;
+  };
 
   const selectedDownload = (): Download | null => {
-    const id = selectedDownloadId();
-    if (!id) return null;
+    const ids = selectedIds();
+    if (ids.size !== 1) return null;
+    const id = ids.values().next().value!;
     const dl = state.downloads.find((d) => d.id === id);
     if (!dl) return null;
     return getEffective(dl);
+  };
+
+  const selectedDownloads = (): Download[] => {
+    const ids = selectedIds();
+    return state.downloads.filter((d) => ids.has(d.id)).map(getEffective);
   };
 
   const getProgress = (id: string): DownloadProgress | undefined => state.progress[id];
@@ -235,9 +291,13 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     totalSpeed,
     activeCount,
     getEffective,
-    selectedDownloadId,
-    selectDownload,
+    selectedIds,
+    selectOne,
+    toggleSelect,
+    rangeSelect,
+    clearSelection,
     selectedDownload,
+    selectedDownloads,
     getProgress,
   };
 

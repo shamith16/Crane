@@ -31,7 +31,7 @@ function formatEta(seconds: number): string {
 
 const DetailPanel: Component = () => {
   const { toggleDetailPanel } = useLayout();
-  const { selectedDownload, selectDownload, getProgress } = useDownloads();
+  const { selectedDownload, clearSelection, getProgress } = useDownloads();
 
   const dl = () => selectedDownload();
   const isActive = () => {
@@ -58,7 +58,7 @@ const DetailPanel: Component = () => {
   };
 
   const handleClose = () => {
-    selectDownload(null);
+    clearSelection();
     toggleDetailPanel();
   };
 
