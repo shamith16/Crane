@@ -38,6 +38,46 @@ export function addDownload(url: string, options?: DownloadOptions): Promise<str
   return invoke<string>("add_download", { url, options: options ?? null });
 }
 
+// ── Download Actions ──────────────────────────
+
+export function pauseDownload(id: string): Promise<void> {
+  return invoke("pause_download", { id });
+}
+
+export function resumeDownload(id: string): Promise<void> {
+  return invoke("resume_download", { id });
+}
+
+export function cancelDownload(id: string): Promise<void> {
+  return invoke("cancel_download", { id });
+}
+
+export function retryDownload(id: string): Promise<void> {
+  return invoke("retry_download", { id });
+}
+
+export function deleteDownload(id: string, deleteFile: boolean): Promise<void> {
+  return invoke("delete_download", { id, deleteFile });
+}
+
+export function pauseAllDownloads(): Promise<string[]> {
+  return invoke<string[]>("pause_all_downloads");
+}
+
+export function resumeAllDownloads(): Promise<string[]> {
+  return invoke<string[]>("resume_all_downloads");
+}
+
+// ── Files ─────────────────────────────────────
+
+export function openFile(id: string): Promise<void> {
+  return invoke("open_file", { id });
+}
+
+export function openFolder(id: string): Promise<void> {
+  return invoke("open_folder", { id });
+}
+
 // ── System ─────────────────────────────────────
 
 export function getDiskSpace(path?: string): Promise<DiskSpace> {
