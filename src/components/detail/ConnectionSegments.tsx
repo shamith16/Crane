@@ -36,33 +36,42 @@ const RowView: Component<{ connections: ConnectionProgress[] }> = (props) => (
 );
 
 /** Mini-bar grid — compact vertical bars. Used for > 8 connections. */
-const GridView: Component<{ connections: ConnectionProgress[] }> = (props) => (
-  <div class="flex flex-wrap gap-[3px]">
-    <For each={props.connections}>
-      {(conn) => {
-        const pct = () => percent(conn);
-        return (
-          <div
-            class="relative w-[14px] h-[36px] rounded-[3px] bg-surface overflow-hidden group cursor-default"
-            title={`#${conn.connection_num} — ${pct()}%`}
-          >
-            {/* Fill from bottom */}
+const GridView: Component<{ connections: ConnectionProgress[] }> = (props) => {
+  const cols = () => {
+    const n = props.connections.length;
+    if (n <= 16) return n;
+    return Math.ceil(n / Math.ceil(n / 16));
+  };
+
+  return (
+    <div
+      class="grid gap-[3px]"
+      style={{ "grid-template-columns": `repeat(${cols()}, 1fr)` }}
+    >
+      <For each={props.connections}>
+        {(conn) => {
+          const pct = () => percent(conn);
+          return (
             <div
-              class="absolute bottom-0 left-0 right-0 bg-accent rounded-[3px] transition-[height] duration-300"
-              style={{ height: `${pct()}%` }}
-            />
-            {/* Hover tooltip overlay */}
-            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <span class="text-[8px] font-mono font-bold text-inverted drop-shadow-sm">
-                {pct()}
-              </span>
+              class="relative h-[36px] rounded-[3px] bg-surface/40 border border-accent/20 overflow-hidden group cursor-default"
+              title={`#${conn.connection_num} — ${pct()}%`}
+            >
+              <div
+                class="absolute bottom-0 left-0 right-0 bg-accent transition-[height] duration-300"
+                style={{ height: `${pct()}%` }}
+              />
+              <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span class="text-[8px] font-mono font-bold text-white rounded-sm bg-page/80 px-[2px]">
+                  {pct()}
+                </span>
+              </div>
             </div>
-          </div>
-        );
-      }}
-    </For>
-  </div>
-);
+          );
+        }}
+      </For>
+    </div>
+  );
+};
 
 const ConnectionSegments: Component<ConnectionSegmentsProps> = (props) => {
   const count = () => props.connections.length;

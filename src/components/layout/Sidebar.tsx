@@ -1,4 +1,4 @@
-import { createSignal, type Component } from "solid-js";
+import type { Component } from "solid-js";
 import {
   Loader,
   Clock3,
@@ -42,8 +42,7 @@ const categoryFilters = [
 
 const Sidebar: Component = () => {
   const { sidebarExpanded, setCurrentPage } = useLayout();
-  const { statusCounts, categoryCounts } = useDownloads();
-  const [activeFilter, setActiveFilter] = createSignal<string>("all");
+  const { statusCounts, categoryCounts, activeFilter, setActiveFilter } = useDownloads();
 
   return (
     <aside
@@ -68,8 +67,8 @@ const Sidebar: Component = () => {
                 icon={() => <filter.icon size={18} />}
                 label={filter.label}
                 count={statusCounts()[filter.id] ?? 0}
-                active={activeFilter() === filter.id}
-                onClick={() => setActiveFilter(filter.id)}
+                active={activeFilter().type === "status" && activeFilter().value === filter.id}
+                onClick={() => setActiveFilter("status", filter.id)}
               />
             ))}
           </SidebarSection>
@@ -86,8 +85,8 @@ const Sidebar: Component = () => {
                 icon={() => <filter.icon size={18} />}
                 label={filter.label}
                 count={categoryCounts()[filter.id] ?? 0}
-                active={activeFilter() === filter.id}
-                onClick={() => setActiveFilter(filter.id)}
+                active={activeFilter().type === "category" && activeFilter().value === filter.id}
+                onClick={() => setActiveFilter("category", filter.id)}
               />
             ))}
           </SidebarSection>

@@ -14,15 +14,15 @@ const SidebarItem: Component<SidebarItemProps> = (props) => {
 
   return (
     <button
-      class={`flex items-center w-full rounded-md transition-colors cursor-pointer ${
+      class={`flex items-center w-full transition-colors cursor-pointer ${
         props.active
-          ? "bg-accent/10 text-accent"
-          : "text-secondary hover:bg-hover hover:text-primary"
-      } ${sidebarExpanded() ? "gap-md px-md h-[32px]" : "justify-center h-[32px]"}`}
+          ? "bg-surface text-primary font-medium border-l-[3px] border-accent"
+          : "text-secondary hover:bg-surface/50 hover:text-primary"
+      } ${sidebarExpanded() ? `gap-md ${props.active ? "pl-[9px] pr-md" : "px-md"} h-[36px]` : "justify-center h-[36px]"}`}
       onClick={props.onClick}
       title={sidebarExpanded() ? undefined : props.label}
     >
-      <span class="shrink-0 w-[18px] h-[18px] flex items-center justify-center">
+      <span class={`shrink-0 w-[18px] h-[18px] flex items-center justify-center ${props.active ? "text-accent" : ""}`}>
         {props.icon()}
       </span>
 

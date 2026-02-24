@@ -23,9 +23,16 @@ interface DownloadStoreActions {
   getEffective(download: Download): Download;
 }
 
+export type FilterType = "status" | "category";
+export type FilterValue = string;
+
 interface DownloadStore {
   state: DownloadStoreState;
-  /** Grouped by status in display order */
+  /** Current active filter */
+  activeFilter: () => { type: FilterType; value: FilterValue };
+  /** Set the active filter */
+  setActiveFilter: (type: FilterType, value: FilterValue) => void;
+  /** Grouped by status in display order, respecting active filter */
   downloadsByStatus: () => { key: string; label: string; items: Download[] }[];
   /** Counts per status for sidebar badges */
   statusCounts: () => Record<string, number>;
@@ -82,6 +89,10 @@ export const useDownloads = (): DownloadStore => {
 
 export const DownloadStoreProvider: ParentComponent = (props) => {
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
+  const [activeFilter, setActiveFilterRaw] = createSignal<{ type: FilterType; value: FilterValue }>({
+    type: "status",
+    value: "all",
+  });
   let lastClickedId: string | null = null;
 
   const [state, setState] = createStore<DownloadStoreState>({
@@ -163,11 +174,30 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     };
   };
 
+  const setActiveFilter = (type: FilterType, value: FilterValue) => {
+    setActiveFilterRaw({ type, value });
+  };
+
+  const filteredDownloads = () => {
+    const filter = activeFilter();
+    if (filter.type === "status") {
+      if (filter.value === "all") return state.downloads;
+      if (filter.value === "active") {
+        return state.downloads.filter(
+          (d) => d.status === "downloading" || d.status === "analyzing",
+        );
+      }
+      return state.downloads.filter((d) => d.status === filter.value);
+    }
+    // category filter
+    return state.downloads.filter((d) => d.category === filter.value);
+  };
+
   const downloadsByStatus = () =>
     STATUS_ORDER.map((group) => ({
       key: group.key,
       label: group.label,
-      items: state.downloads.filter((d) => d.status === group.key),
+      items: filteredDownloads().filter((d) => d.status === group.key),
     })).filter((group) => group.items.length > 0);
 
   const statusCounts = () => {
@@ -284,6 +314,8 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
 
   const store: DownloadStore = {
     state,
+    activeFilter,
+    setActiveFilter,
     downloadsByStatus,
     statusCounts,
     categoryCounts,
