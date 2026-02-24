@@ -31,11 +31,11 @@ const DetailActions: Component<DetailActionsProps> = (props) => {
     <div class="flex flex-col gap-[8px]">
       <Show when={isActive()}>
         <button
-          class="flex items-center justify-center gap-[6px] w-full rounded-md py-[8px] border border-surface text-secondary cursor-pointer hover:bg-hover transition-colors"
+          class="flex items-center justify-center gap-[6px] w-full rounded-md py-[8px] bg-inset border border-surface text-secondary cursor-pointer hover:bg-hover transition-colors"
           onClick={() => action(() => pauseDownload(dl().id))}
         >
           <Pause size={14} />
-          <span class="text-caption font-semibold font-mono tracking-wide">PAUSE</span>
+          <span class="text-caption font-semibold font-mono tracking-[1px]">PAUSE</span>
         </button>
       </Show>
 
@@ -45,7 +45,7 @@ const DetailActions: Component<DetailActionsProps> = (props) => {
           onClick={() => action(() => resumeDownload(dl().id))}
         >
           <Play size={14} />
-          <span class="text-caption font-semibold font-mono tracking-wide">RESUME</span>
+          <span class="text-caption font-semibold font-mono tracking-[1px]">RESUME</span>
         </button>
       </Show>
 
@@ -55,7 +55,7 @@ const DetailActions: Component<DetailActionsProps> = (props) => {
           onClick={() => action(() => retryDownload(dl().id))}
         >
           <RotateCcw size={14} />
-          <span class="text-caption font-semibold font-mono tracking-wide">RETRY</span>
+          <span class="text-caption font-semibold font-mono tracking-[1px]">RETRY</span>
         </button>
       </Show>
 
@@ -65,24 +65,24 @@ const DetailActions: Component<DetailActionsProps> = (props) => {
           onClick={() => action(() => openFolder(dl().id))}
         >
           <FolderOpen size={14} />
-          <span class="text-caption font-semibold font-mono tracking-wide">OPEN FOLDER</span>
+          <span class="text-caption font-semibold font-mono tracking-[1px]">OPEN FOLDER</span>
         </button>
         <button
-          class="flex items-center justify-center gap-[6px] w-full rounded-md py-[8px] border border-surface text-secondary cursor-pointer hover:bg-hover transition-colors"
+          class="flex items-center justify-center gap-[6px] w-full rounded-md py-[8px] bg-inset border border-surface text-secondary cursor-pointer hover:bg-hover transition-colors"
           onClick={() => action(() => openFile(dl().id))}
         >
           <FileSearch size={14} />
-          <span class="text-caption font-semibold font-mono tracking-wide">OPEN FILE</span>
+          <span class="text-caption font-semibold font-mono tracking-[1px]">OPEN FILE</span>
         </button>
       </Show>
 
       <Show when={isActive() || isPaused()}>
         <button
-          class="flex items-center justify-center gap-[6px] w-full rounded-md py-[8px] border border-error text-error cursor-pointer hover:bg-error/10 transition-colors"
+          class="flex items-center justify-center gap-[6px] w-full rounded-md py-[8px] bg-inset border border-error text-error cursor-pointer hover:bg-error/10 transition-colors"
           onClick={() => action(() => cancelDownload(dl().id))}
         >
           <X size={14} />
-          <span class="text-caption font-semibold font-mono tracking-wide">CANCEL</span>
+          <span class="text-caption font-semibold font-mono tracking-[1px]">CANCEL</span>
         </button>
       </Show>
     </div>

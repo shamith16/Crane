@@ -32,20 +32,23 @@ const FileInfoGrid: Component<FileInfoGridProps> = (props) => {
   const dl = () => props.download;
 
   return (
-    <div class="flex flex-col gap-[8px] rounded-md bg-inset p-[10px_12px]">
+    <div class="flex flex-col gap-[8px] rounded-lg bg-inset p-[10px_12px] border border-divider">
       <span class="text-caption font-semibold text-tertiary uppercase tracking-wider">
         File Info
       </span>
-      <div class="flex flex-col gap-[6px]">
+      <div class="flex flex-col gap-[6px] pt-[4px]">
         <InfoRow label="Type" value={dl().mime_type ?? "Unknown"} />
         <InfoRow label="Save to" value={shortenPath(dl().save_path)} />
         <InfoRow label="Started" value={formatTime(dl().started_at)} />
         <InfoRow
           label="Resumable"
-          value={dl().resumable ? "Yes" : "No"}
+          value={dl().resumable ? "✓ Yes" : "✗ No"}
           color={dl().resumable ? "text-success" : "text-error"}
         />
       </div>
+      <p class="text-caption text-muted">
+        Tip: destination path is editable from Settings when needed.
+      </p>
     </div>
   );
 };

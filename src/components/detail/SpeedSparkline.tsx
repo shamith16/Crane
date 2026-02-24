@@ -95,14 +95,14 @@ const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
   });
 
   return (
-    <div class="flex flex-col gap-[8px]">
+    <div class="flex flex-col gap-[6px] pt-[4px]">
       <span class="text-caption font-semibold text-tertiary uppercase tracking-wider">
         Speed History
       </span>
       <canvas
         ref={canvasRef}
         style={{ width: `${CANVAS_W}px`, height: `${CANVAS_H}px` }}
-        class="rounded-md"
+        class="rounded-[10px] bg-inset"
       />
     </div>
   );

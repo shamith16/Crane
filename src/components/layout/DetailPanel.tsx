@@ -63,18 +63,18 @@ const DetailPanel: Component = () => {
   };
 
   return (
-    <aside class="w-[320px] shrink-0 bg-surface border-l border-border overflow-y-auto">
-      <div class="flex flex-col gap-[16px] p-[16px]">
+    <aside class="w-[320px] shrink-0 bg-surface border-l border-divider overflow-y-auto">
+      <div class="flex flex-col gap-[16px] py-[20px] px-[16px]">
         {/* Header */}
         <div class="flex items-center justify-between">
           <span class="text-caption font-semibold text-muted uppercase tracking-wider">
             Download Details
           </span>
           <button
-            class="w-[24px] h-[24px] flex items-center justify-center rounded text-secondary hover:text-primary hover:bg-hover transition-colors cursor-pointer"
+            class="w-[24px] h-[24px] flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors cursor-pointer"
             onClick={handleClose}
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
 
@@ -88,29 +88,29 @@ const DetailPanel: Component = () => {
             <>
               {/* File info: name + source */}
               <div class="flex flex-col gap-[4px]">
-                <p class="text-body font-semibold text-primary break-all leading-snug">
+                <p class="text-heading-sm font-semibold text-primary break-all leading-snug">
                   {download().filename}
                 </p>
-                <p class="text-[11px] font-mono text-muted truncate">
-                  {download().url}
+                <p class="text-caption font-mono text-muted truncate">
+                  {download().source_domain ?? download().url}
                 </p>
               </div>
 
               {/* Progress section — only for active/paused/queued */}
               <Show when={download().status !== "completed" && download().status !== "failed"}>
-                <div class="flex flex-col gap-[10px] rounded-md bg-inset p-[12px]">
+                <div class="flex flex-col gap-[8px] rounded-lg bg-inset p-[16px]">
                   {/* Big percent + speed/ETA */}
-                  <div class="flex items-end justify-between">
-                    <span class="text-[28px] font-bold font-mono text-primary leading-none">
+                  <div class="flex items-center justify-between">
+                    <span class="text-display font-bold font-mono text-accent leading-none">
                       {percent()}%
                     </span>
                     <Show when={isActive() && download().speed > 0}>
                       <div class="flex flex-col items-end gap-[2px]">
-                        <span class="text-caption font-semibold font-mono text-accent">
+                        <span class="text-body-lg font-semibold font-mono text-primary">
                           {formatSpeed(download().speed)}
                         </span>
                         <Show when={etaSeconds() !== null}>
-                          <span class="text-[10px] font-mono text-muted">
+                          <span class="text-caption font-mono text-muted">
                             ETA {formatEta(etaSeconds()!)}
                           </span>
                         </Show>
@@ -119,20 +119,20 @@ const DetailPanel: Component = () => {
                   </div>
 
                   {/* Progress bar */}
-                  <div class="h-[6px] rounded-full bg-surface overflow-hidden">
+                  <div class="h-[6px] rounded-[3px] bg-surface overflow-hidden">
                     <div
-                      class="h-full rounded-full bg-accent transition-[width] duration-300"
+                      class="h-full rounded-[3px] bg-accent transition-[width] duration-300"
                       style={{ width: `${percent()}%` }}
                     />
                   </div>
 
                   {/* Size + connections */}
                   <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-mono text-secondary">
+                    <span class="text-caption font-mono font-medium text-secondary">
                       {formatSize(download().downloaded_size)}
                       {download().total_size != null && ` / ${formatSize(download().total_size!)}`}
                     </span>
-                    <span class="text-[10px] font-mono text-muted">
+                    <span class="text-caption font-mono font-medium text-muted">
                       {download().connections} {download().connections === 1 ? "connection" : "connections"}
                     </span>
                   </div>
