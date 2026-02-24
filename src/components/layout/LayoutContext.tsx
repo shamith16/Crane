@@ -1,5 +1,7 @@
 import { createSignal, createContext, useContext, type ParentComponent } from "solid-js";
 
+export type AppPage = "downloads" | "settings";
+
 interface LayoutContextValue {
   sidebarExpanded: () => boolean;
   setSidebarExpanded: (v: boolean) => void;
@@ -7,6 +9,8 @@ interface LayoutContextValue {
   detailPanelVisible: () => boolean;
   setDetailPanelVisible: (v: boolean) => void;
   toggleDetailPanel: () => void;
+  currentPage: () => AppPage;
+  setCurrentPage: (page: AppPage) => void;
 }
 
 const LayoutContext = createContext<LayoutContextValue>();
@@ -14,6 +18,7 @@ const LayoutContext = createContext<LayoutContextValue>();
 export const LayoutProvider: ParentComponent = (props) => {
   const [sidebarExpanded, setSidebarExpanded] = createSignal(true);
   const [detailPanelVisible, setDetailPanelVisible] = createSignal(false);
+  const [currentPage, setCurrentPage] = createSignal<AppPage>("downloads");
 
   const value: LayoutContextValue = {
     sidebarExpanded,
@@ -22,6 +27,8 @@ export const LayoutProvider: ParentComponent = (props) => {
     detailPanelVisible,
     setDetailPanelVisible,
     toggleDetailPanel: () => setDetailPanelVisible((prev) => !prev),
+    currentPage,
+    setCurrentPage,
   };
 
   return (

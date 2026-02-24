@@ -7,6 +7,7 @@ import type {
   DiskSpace,
   AppInfo,
 } from "../types/download";
+import type { AppConfig } from "../types/settings";
 
 export { isTauri };
 
@@ -76,6 +77,36 @@ export function openFile(id: string): Promise<void> {
 
 export function openFolder(id: string): Promise<void> {
   return invoke("open_folder", { id });
+}
+
+// ── Settings ──────────────────────────────────
+
+export function getSettings(): Promise<AppConfig> {
+  return invoke<AppConfig>("get_settings");
+}
+
+export function updateSettings(settings: Record<string, unknown>): Promise<void> {
+  return invoke("update_settings", { settings });
+}
+
+export function getConfigPath(): Promise<string> {
+  return invoke<string>("get_config_path");
+}
+
+export function openConfigFile(): Promise<void> {
+  return invoke("open_config_file");
+}
+
+export function exportSettings(path: string): Promise<void> {
+  return invoke("export_settings", { path });
+}
+
+export function importSettings(path: string): Promise<void> {
+  return invoke("import_settings", { path });
+}
+
+export function resetSettings(): Promise<void> {
+  return invoke("reset_settings");
 }
 
 // ── System ─────────────────────────────────────

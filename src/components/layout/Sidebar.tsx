@@ -41,7 +41,7 @@ const categoryFilters = [
 ] as const;
 
 const Sidebar: Component = () => {
-  const { sidebarExpanded, toggleSidebar } = useLayout();
+  const { sidebarExpanded, setCurrentPage } = useLayout();
   const { statusCounts, categoryCounts } = useDownloads();
   const [activeFilter, setActiveFilter] = createSignal<string>("all");
 
@@ -94,12 +94,12 @@ const Sidebar: Component = () => {
         </div>
       </div>
 
-      {/* Settings — temp sidebar toggle until keyboard shortcut is added */}
+      {/* Settings */}
       <div class="px-sm pb-sm">
         <SidebarItem
           icon={() => <Settings size={18} />}
           label="Settings"
-          onClick={toggleSidebar}
+          onClick={() => setCurrentPage("settings")}
         />
       </div>
 
