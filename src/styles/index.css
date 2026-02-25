@@ -120,3 +120,13 @@ input, textarea, [data-selectable] {
 @utility animate-spin-slow {
   animation: spin 1.5s linear infinite;
 }
+
+/* uPlot sparkline: strip default chrome */
+.uplot-sparkline .u-wrap,
+.uplot-sparkline .u-over,
+.uplot-sparkline .u-under {
+  cursor: default !important;
+}
+.uplot-sparkline .u-wrap {
+  background: transparent;
+}

@@ -1,109 +1,111 @@
-import { onMount, onCleanup, createEffect, type Component } from "solid-js";
+import { onMount, onCleanup, createEffect, createSignal, type Component } from "solid-js";
+import { SolidUplot } from "@dschz/solid-uplot";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 
 interface SpeedSparklineProps {
-  /** Current speed in bytes/sec — push a new sample each time this changes */
+  /** Current speed in bytes/sec */
   speed: number;
   /** Max number of samples to retain */
   maxSamples?: number;
 }
 
-const CANVAS_W = 280;
-const CANVAS_H = 100;
-const DPR = typeof window !== "undefined" ? window.devicePixelRatio ?? 1 : 1;
+const SAMPLE_INTERVAL = 250;
+
+function formatSpeed(bytesPerSec: number): string {
+  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+  if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
+}
 
 const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
-  const maxSamples = () => props.maxSamples ?? 60;
+  const maxSamples = () => props.maxSamples ?? 120;
 
-  let canvasRef!: HTMLCanvasElement;
-  let samples: number[] = [];
-  let rafId: number | undefined;
+  let latestSpeed = 0;
+  let timePoints: number[] = [];
+  let speedPoints: number[] = [];
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+  let startTime = Date.now() / 1000;
 
-  function draw() {
-    const ctx = canvasRef.getContext("2d");
-    if (!ctx) return;
+  const [chartData, setChartData] = createSignal<[number[], number[]]>([[], []]);
+  const [displaySpeed, setDisplaySpeed] = createSignal(0);
 
-    const w = CANVAS_W * DPR;
-    const h = CANVAS_H * DPR;
-    ctx.clearRect(0, 0, w, h);
-
-    if (samples.length < 2) return;
-
-    const peak = Math.max(...samples, 1);
-    const stepX = w / (maxSamples() - 1);
-
-    // Offset so the line starts from the right if we have fewer samples
-    const offsetX = (maxSamples() - samples.length) * stepX;
-
-    const toY = (val: number) => h - (val / peak) * (h - 8 * DPR) - 4 * DPR;
-
-    // Build path
-    ctx.beginPath();
-    ctx.moveTo(offsetX, toY(samples[0]));
-    for (let i = 1; i < samples.length; i++) {
-      ctx.lineTo(offsetX + i * stepX, toY(samples[i]));
-    }
-
-    // Stroke line
-    ctx.strokeStyle = getComputedStyle(canvasRef).getPropertyValue("--color-accent").trim() || "#6366f1";
-    ctx.lineWidth = 2 * DPR;
-    ctx.lineJoin = "round";
-    ctx.stroke();
-
-    // Fill gradient under the line
-    const fillPath = new Path2D();
-    fillPath.moveTo(offsetX, h);
-    fillPath.lineTo(offsetX, toY(samples[0]));
-    for (let i = 1; i < samples.length; i++) {
-      fillPath.lineTo(offsetX + i * stepX, toY(samples[i]));
-    }
-    fillPath.lineTo(offsetX + (samples.length - 1) * stepX, h);
-    fillPath.closePath();
-
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    const accent = getComputedStyle(canvasRef).getPropertyValue("--color-accent").trim() || "#6366f1";
-    grad.addColorStop(0, accent + "40");
-    grad.addColorStop(1, accent + "00");
-    ctx.fillStyle = grad;
-    ctx.fill(fillPath);
-
-    // Live dot on the last point
-    const lastX = offsetX + (samples.length - 1) * stepX;
-    const lastY = toY(samples[samples.length - 1]);
-    ctx.beginPath();
-    ctx.arc(lastX, lastY, 3 * DPR, 0, Math.PI * 2);
-    ctx.fillStyle = accent;
-    ctx.fill();
-  }
-
-  onMount(() => {
-    canvasRef.width = CANVAS_W * DPR;
-    canvasRef.height = CANVAS_H * DPR;
+  // Track reactive speed without pushing samples
+  createEffect(() => {
+    latestSpeed = props.speed;
   });
 
-  createEffect(() => {
-    const speed = props.speed;
-    samples.push(speed);
-    if (samples.length > maxSamples()) {
-      samples = samples.slice(-maxSamples());
-    }
-    if (rafId != null) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(draw);
+  onMount(() => {
+    intervalId = setInterval(() => {
+      const now = Date.now() / 1000 - startTime;
+      timePoints.push(now);
+      speedPoints.push(latestSpeed);
+
+      if (timePoints.length > maxSamples()) {
+        timePoints = timePoints.slice(-maxSamples());
+        speedPoints = speedPoints.slice(-maxSamples());
+      }
+
+      setDisplaySpeed(latestSpeed);
+      setChartData([timePoints.slice(), speedPoints.slice()]);
+    }, SAMPLE_INTERVAL);
   });
 
   onCleanup(() => {
-    if (rafId != null) cancelAnimationFrame(rafId);
+    if (intervalId != null) clearInterval(intervalId);
   });
+
+  const accentColor = () => {
+    if (typeof document === "undefined") return "#22D3EE";
+    return getComputedStyle(document.documentElement)
+      .getPropertyValue("--color-accent").trim() || "#22D3EE";
+  };
 
   return (
     <div class="flex flex-col gap-[6px] pt-[4px]">
-      <span class="text-caption font-semibold text-tertiary uppercase tracking-wider">
+      <span class="text-caption font-semibold text-tertiary uppercase tracking-[2px]">
         Speed History
       </span>
-      <canvas
-        ref={canvasRef}
-        style={{ width: `${CANVAS_W}px`, height: `${CANVAS_H}px` }}
-        class="rounded-[10px] bg-inset"
-      />
+      <div class="flex items-baseline gap-[6px] pb-[2px]">
+        <span class="text-body font-mono font-extrabold text-accent">
+          {formatSpeed(displaySpeed())}
+        </span>
+        <span class="text-caption text-muted">current</span>
+      </div>
+      <div class="rounded-[10px] bg-inset overflow-hidden uplot-sparkline">
+        <SolidUplot
+          data={chartData()}
+          width={280}
+          height={64}
+          cursor={{ show: false }}
+          legend={{ show: false }}
+          scales={{
+            x: { time: false },
+          }}
+          axes={[
+            { show: false },
+            { show: false },
+          ]}
+          series={[
+            {},
+            {
+              stroke: accentColor(),
+              fill: (self: uPlot, seriesIdx: number) => {
+                const ctx = self.ctx;
+                const grad = ctx.createLinearGradient(0, 0, 0, self.height);
+                const color = accentColor();
+                grad.addColorStop(0, color + "30");
+                grad.addColorStop(1, color + "00");
+                return grad;
+              },
+              width: 2,
+              paths: uPlot.paths.spline!(),
+              points: { show: false },
+            },
+          ]}
+        />
+      </div>
     </div>
   );
 };

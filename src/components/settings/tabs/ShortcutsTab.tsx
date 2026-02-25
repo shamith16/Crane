@@ -38,7 +38,7 @@ const ShortcutRow: Component<{ shortcut: Shortcut }> = (props) => {
       <div class="flex items-center gap-[4px]">
         <For each={props.shortcut.keys}>
           {(key) => (
-            <kbd class="inline-flex items-center justify-center min-w-[24px] h-[24px] px-[6px] rounded-[4px] bg-surface border border-border text-mini font-mono font-semibold text-muted">
+            <kbd class="inline-flex items-center justify-center min-w-[24px] h-[24px] px-[6px] rounded-[4px] bg-surface border border-border text-mini font-mono font-extrabold text-muted">
               {key}
             </kbd>
           )}

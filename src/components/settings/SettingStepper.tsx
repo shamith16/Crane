@@ -31,7 +31,7 @@ const SettingStepper: Component<SettingStepperProps> = (props) => {
       >
         <Minus size={12} />
       </button>
-      <div class="flex items-center justify-center min-w-[48px] h-[32px] bg-inset text-caption font-mono font-semibold text-primary px-[8px]">
+      <div class="flex items-center justify-center min-w-[48px] h-[32px] bg-inset text-caption font-mono font-extrabold text-primary px-[8px]">
         {props.value}
       </div>
       <button

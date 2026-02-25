@@ -97,7 +97,7 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
             {/* Size · MIME */}
             <div class="flex items-center gap-[12px]">
               <Show when={props.analysis.total_size != null}>
-                <span class="text-body font-mono font-semibold text-primary">
+                <span class="text-body font-mono font-extrabold text-primary">
                   {formatSize(props.analysis.total_size!)}
                 </span>
                 <span class="w-[3px] h-[3px] rounded-full bg-muted" />
@@ -113,7 +113,7 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
             <div class="flex items-center gap-[8px] flex-wrap">
               {/* Resumable */}
               <span
-                class={`flex items-center gap-[4px] rounded px-[8px] py-[3px] text-mini font-mono font-semibold ${
+                class={`flex items-center gap-[4px] rounded px-[8px] py-[3px] text-mini font-mono font-extrabold ${
                   props.analysis.resumable
                     ? "bg-success/20 text-success"
                     : "bg-error/20 text-error"
@@ -126,14 +126,14 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
               </span>
 
               {/* Category */}
-              <span class="flex items-center gap-[4px] rounded bg-accent/15 px-[8px] py-[3px] text-mini font-mono font-semibold text-accent">
+              <span class="flex items-center gap-[4px] rounded bg-accent/15 px-[8px] py-[3px] text-mini font-mono font-extrabold text-accent">
                 {icon()({ size: 12 })}
                 {props.analysis.category.charAt(0).toUpperCase() + props.analysis.category.slice(1)}
               </span>
 
               {/* Server */}
               <Show when={props.analysis.server}>
-                <span class="flex items-center gap-[4px] rounded bg-inset px-[8px] py-[3px] text-mini font-mono font-semibold text-muted">
+                <span class="flex items-center gap-[4px] rounded bg-inset px-[8px] py-[3px] text-mini font-mono font-extrabold text-muted">
                   <Server size={12} />
                   {props.analysis.server}
                 </span>
@@ -223,13 +223,13 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
       {/* Footer */}
       <div class="flex items-center justify-end gap-[12px] px-[24px] py-[16px] border-t border-inset">
         <button
-          class="rounded-md bg-inset px-[20px] py-[10px] text-body-sm font-mono font-semibold text-secondary hover:text-primary hover:bg-hover cursor-pointer transition-colors"
+          class="rounded-md bg-inset px-[20px] py-[10px] text-body-sm font-mono font-extrabold text-secondary hover:text-primary hover:bg-hover cursor-pointer transition-colors"
           onClick={props.onCancel}
         >
           Cancel
         </button>
         <button
-          class="flex items-center gap-[6px] rounded-md bg-accent px-[24px] py-[10px] text-body-sm font-mono font-semibold text-inverted hover:bg-accent/80 cursor-pointer transition-colors disabled:opacity-50"
+          class="flex items-center gap-[6px] rounded-md bg-accent px-[24px] py-[10px] text-body-sm font-mono font-extrabold text-inverted hover:bg-accent/80 cursor-pointer transition-colors disabled:opacity-50"
           onClick={handleConfirm}
           disabled={props.submitting}
         >

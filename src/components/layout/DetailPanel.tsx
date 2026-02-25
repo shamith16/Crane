@@ -15,7 +15,7 @@ function formatSize(bytes: number): string {
 }
 
 function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec < 1024) return `${bytesPerSec} B/s`;
+  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
   if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
   if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
   return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
@@ -53,8 +53,8 @@ const DetailPanel: Component = () => {
 
   const percent = () => {
     const total = liveTotalSize();
-    if (!total || total === 0) return 0;
-    return Math.round((liveDownloaded() / total) * 100);
+    if (!total || total === 0) return "0.0";
+    return ((liveDownloaded() / total) * 100).toFixed(1);
   };
 
   const etaSeconds = () => {
@@ -95,7 +95,7 @@ const DetailPanel: Component = () => {
             <>
               {/* File info: name + source */}
               <div class="flex flex-col gap-[4px]">
-                <p class="text-heading-sm font-semibold text-primary break-all leading-snug">
+                <p class="text-heading-sm font-extrabold text-primary break-all leading-snug">
                   {download().filename}
                 </p>
                 <p class="text-caption font-mono text-muted truncate">
@@ -108,12 +108,12 @@ const DetailPanel: Component = () => {
                 <div class="flex flex-col gap-[8px] rounded-lg bg-inset p-[16px]">
                   {/* Big percent + speed/ETA */}
                   <div class="flex items-center justify-between">
-                    <span class="text-display font-bold font-mono text-accent leading-none">
+                    <span class="text-display font-bold font-mono text-accent leading-none tracking-[-0.08em]">
                       {percent()}%
                     </span>
                     <Show when={isActive() && liveSpeed() > 0}>
                       <div class="flex flex-col items-end gap-[2px]">
-                        <span class="text-body-lg font-semibold font-mono text-primary">
+                        <span class="text-body-lg font-extrabold font-mono text-primary">
                           {formatSpeed(liveSpeed())}
                         </span>
                         <Show when={etaSeconds() !== null}>

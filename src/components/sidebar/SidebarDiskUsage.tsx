@@ -34,7 +34,7 @@ const SidebarDiskUsage: Component = () => {
   };
 
   return (
-    <div class="border-t border-border p-lg">
+    <div class="p-lg">
       {sidebarExpanded() ? (
         <div class="flex flex-col gap-xs">
           <span class="text-caption text-muted uppercase tracking-wider">Disk Usage</span>

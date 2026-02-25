@@ -54,9 +54,6 @@ const Sidebar: Component = () => {
         <SidebarLogo />
       </div>
 
-      {/* Divider */}
-      <div class="h-px bg-border mx-lg" />
-
       {/* Scrollable filter sections */}
       <div class="flex-1 min-h-0 overflow-y-auto">
         {/* Status filters */}
@@ -73,9 +70,6 @@ const Sidebar: Component = () => {
             ))}
           </SidebarSection>
         </div>
-
-        {/* Divider */}
-        <div class="h-px bg-border mx-lg" />
 
         {/* Category filters */}
         <div class="px-sm pt-lg pb-sm">

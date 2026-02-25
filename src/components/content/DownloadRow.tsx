@@ -35,7 +35,7 @@ function formatSize(bytes: number): string {
 }
 
 function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec < 1024) return `${bytesPerSec} B/s`;
+  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
   if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
   if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
   return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;

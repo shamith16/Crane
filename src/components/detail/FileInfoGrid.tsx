@@ -22,7 +22,7 @@ function shortenPath(path: string): string {
 const InfoRow: Component<{ label: string; value: string; color?: string }> = (props) => (
   <div class="flex justify-between gap-[12px]">
     <span class="text-caption font-semibold text-tertiary tracking-wide shrink-0">{props.label}</span>
-    <span class={`text-body-sm font-mono font-semibold text-right truncate ${props.color ?? "text-primary"}`}>
+    <span class={`text-body-sm font-mono font-extrabold text-right truncate ${props.color ?? "text-primary"}`}>
       {props.value}
     </span>
   </div>
@@ -46,9 +46,6 @@ const FileInfoGrid: Component<FileInfoGridProps> = (props) => {
           color={dl().resumable ? "text-success" : "text-error"}
         />
       </div>
-      <p class="text-caption text-muted">
-        Tip: destination path is editable from Settings when needed.
-      </p>
     </div>
   );
 };

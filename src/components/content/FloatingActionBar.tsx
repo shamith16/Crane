@@ -111,7 +111,7 @@ const FloatingActionBar: Component = () => {
         class="absolute bottom-[16px] left-1/2 -translate-x-1/2 z-10 flex items-center flex-nowrap gap-[12px] rounded-[12px] bg-surface border border-accent px-[16px] py-[8px]"
         style={{ "box-shadow": "0 4px 20px #22D3EE20" }}
       >
-        <span class="text-[12px] font-mono font-semibold text-accent whitespace-nowrap">
+        <span class="text-[12px] font-mono font-extrabold text-accent whitespace-nowrap">
           {count()} selected
         </span>
 
@@ -120,7 +120,7 @@ const FloatingActionBar: Component = () => {
         <For each={actions()}>
           {(action) => (
             <button
-              class={`flex items-center gap-[6px] rounded-md px-[12px] py-[6px] text-[11px] font-mono font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+              class={`flex items-center gap-[6px] rounded-md px-[12px] py-[6px] text-[11px] font-mono font-extrabold whitespace-nowrap cursor-pointer transition-colors ${
                 action.accent
                   ? "bg-accent text-inverted hover:bg-accent/80"
                   : `bg-inset ${action.color ?? "text-secondary"} hover:bg-hover`

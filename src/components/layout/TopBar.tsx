@@ -46,7 +46,7 @@ const TopBar: Component = () => {
           onClick={submit}
         >
           <ClipboardPaste size={14} />
-          <span class="text-caption font-mono font-semibold tracking-[1px]">ADD URL</span>
+          <span class="text-caption font-mono font-extrabold tracking-[1px]">ADD URL</span>
         </button>
       </div>
 
