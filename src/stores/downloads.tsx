@@ -62,6 +62,8 @@ interface DownloadStore {
   selectedDownloads: () => Download[];
   /** Get live progress for a download */
   getProgress: (id: string) => DownloadProgress | undefined;
+  /** Force immediate refresh of downloads from backend */
+  refreshDownloads: () => void;
 }
 
 // ── Status display order ───────────────────────
@@ -130,17 +132,24 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     );
 
     // Unsubscribe from downloads that are no longer active
+    const terminalIds = new Set(
+      downloads.filter((d) => d.status === "completed" || d.status === "failed").map((d) => d.id),
+    );
     for (const [id] of activeChannels) {
       if (!activeIds.has(id)) {
         activeChannels.delete(id);
-        // Channel will be GC'd, backend detects send failure and stops
-        setState("progress", id, undefined!);
+        // Only clear progress for terminal states — paused/queued keep last snapshot
+        if (terminalIds.has(id)) {
+          setState("progress", id, undefined!);
+        }
       }
     }
 
     // Subscribe to new active downloads
     for (const id of activeIds) {
       if (!activeChannels.has(id)) {
+        // Keep existing progress snapshot visible until the new channel
+        // delivers its first tick — avoids flashing 0% on resume
         const channel = subscribeProgress(id, (progress) => {
           setState("progress", id, progress);
         });
@@ -300,17 +309,19 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     const ids = selectedIds();
     if (ids.size !== 1) return null;
     const id = ids.values().next().value!;
-    const dl = state.downloads.find((d) => d.id === id);
-    if (!dl) return null;
-    return getEffective(dl);
+    return state.downloads.find((d) => d.id === id) ?? null;
   };
 
   const selectedDownloads = (): Download[] => {
     const ids = selectedIds();
-    return state.downloads.filter((d) => ids.has(d.id)).map(getEffective);
+    return state.downloads.filter((d) => ids.has(d.id));
   };
 
   const getProgress = (id: string): DownloadProgress | undefined => state.progress[id];
+
+  const refreshDownloads = () => {
+    if (isTauri()) fetchDownloads();
+  };
 
   const store: DownloadStore = {
     state,
@@ -331,6 +342,7 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     selectedDownload,
     selectedDownloads,
     getProgress,
+    refreshDownloads,
   };
 
   return (

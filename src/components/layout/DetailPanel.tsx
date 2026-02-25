@@ -33,28 +33,35 @@ const DetailPanel: Component = () => {
   const { toggleDetailPanel } = useLayout();
   const { selectedDownload, clearSelection, getProgress } = useDownloads();
 
+  // Base download — only changes on selection or status change, NOT on progress ticks
   const dl = () => selectedDownload();
   const isActive = () => {
     const d = dl();
     return d != null && (d.status === "downloading" || d.status === "analyzing");
   };
 
-  const percent = () => {
-    const d = dl();
-    if (!d || !d.total_size || d.total_size === 0) return 0;
-    return Math.round((d.downloaded_size / d.total_size) * 100);
-  };
-
-  const etaSeconds = () => {
-    const d = dl();
-    if (!d || !isActive() || d.speed === 0 || !d.total_size) return null;
-    return Math.round((d.total_size - d.downloaded_size) / d.speed);
-  };
-
+  // Read progress fields directly from store for fine-grained reactivity
   const progress = () => {
     const d = dl();
     if (!d) return undefined;
     return getProgress(d.id);
+  };
+
+  const liveSpeed = () => progress()?.speed ?? dl()?.speed ?? 0;
+  const liveDownloaded = () => progress()?.downloaded_size ?? dl()?.downloaded_size ?? 0;
+  const liveTotalSize = () => progress()?.total_size ?? dl()?.total_size;
+
+  const percent = () => {
+    const total = liveTotalSize();
+    if (!total || total === 0) return 0;
+    return Math.round((liveDownloaded() / total) * 100);
+  };
+
+  const etaSeconds = () => {
+    const speed = liveSpeed();
+    const total = liveTotalSize();
+    if (!isActive() || speed === 0 || !total) return null;
+    return Math.round((total - liveDownloaded()) / speed);
   };
 
   const handleClose = () => {
@@ -104,13 +111,13 @@ const DetailPanel: Component = () => {
                     <span class="text-display font-bold font-mono text-accent leading-none">
                       {percent()}%
                     </span>
-                    <Show when={isActive() && download().speed > 0}>
+                    <Show when={isActive() && liveSpeed() > 0}>
                       <div class="flex flex-col items-end gap-[2px]">
                         <span class="text-body-lg font-semibold font-mono text-primary">
-                          {formatSpeed(download().speed)}
+                          {formatSpeed(liveSpeed())}
                         </span>
                         <Show when={etaSeconds() !== null}>
-                          <span class="text-caption font-mono text-muted">
+                          <span class="text-caption font-mono font-medium text-muted">
                             ETA {formatEta(etaSeconds()!)}
                           </span>
                         </Show>
@@ -129,8 +136,8 @@ const DetailPanel: Component = () => {
                   {/* Size + connections */}
                   <div class="flex items-center justify-between">
                     <span class="text-caption font-mono font-medium text-secondary">
-                      {formatSize(download().downloaded_size)}
-                      {download().total_size != null && ` / ${formatSize(download().total_size!)}`}
+                      {formatSize(liveDownloaded())}
+                      {liveTotalSize() != null && ` / ${formatSize(liveTotalSize()!)}`}
                     </span>
                     <span class="text-caption font-mono font-medium text-muted">
                       {download().connections} {download().connections === 1 ? "connection" : "connections"}
@@ -146,7 +153,7 @@ const DetailPanel: Component = () => {
 
               {/* Speed sparkline — only for active downloads */}
               <Show when={isActive()}>
-                <SpeedSparkline speed={download().speed} />
+                <SpeedSparkline speed={liveSpeed()} />
               </Show>
 
               {/* File info grid */}

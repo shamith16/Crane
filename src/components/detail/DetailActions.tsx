@@ -1,6 +1,7 @@
 import { Show, type Component } from "solid-js";
 import { Pause, Play, X, RotateCcw, FolderOpen, FileSearch } from "lucide-solid";
 import type { Download } from "../../types/download";
+import { useDownloads } from "../../stores/downloads";
 import {
   isTauri,
   pauseDownload,
@@ -16,6 +17,7 @@ interface DetailActionsProps {
 }
 
 const DetailActions: Component<DetailActionsProps> = (props) => {
+  const { refreshDownloads } = useDownloads();
   const dl = () => props.download;
   const isActive = () => dl().status === "downloading" || dl().status === "analyzing";
   const isPaused = () => dl().status === "paused";
@@ -24,7 +26,7 @@ const DetailActions: Component<DetailActionsProps> = (props) => {
 
   const action = async (fn: () => Promise<void>) => {
     if (!isTauri()) return;
-    try { await fn(); } catch (e) { console.error("[crane] action failed:", e); }
+    try { await fn(); refreshDownloads(); } catch (e) { console.error("[crane] action failed:", e); }
   };
 
   return (

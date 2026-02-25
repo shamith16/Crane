@@ -21,7 +21,7 @@ const SectionHeader: ParentComponent<SectionHeaderProps> = (props) => {
           ) : (
             <ChevronRight size={14} class="text-tertiary" />
           )}
-          <span class="text-caption font-semibold text-tertiary uppercase tracking-wider">
+          <span class="text-caption font-semibold text-tertiary uppercase tracking-[2px]">
             {props.label}
           </span>
         </div>

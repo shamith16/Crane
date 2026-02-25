@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::bandwidth::BandwidthLimiter;
 use crate::config::types::SpeedScheduleEntry;
@@ -148,8 +150,8 @@ impl QueueManager {
         Ok(id)
     }
 
-    /// Pause a currently active download. Frees the slot and auto-starts
-    /// the next queued download if one exists.
+    /// Pause a currently active download. Flushes live progress to DB,
+    /// frees the slot, and auto-starts the next queued download.
     pub async fn pause(&self, id: &str) -> Result<(), CraneError> {
         let mut active = self.active.lock().await;
         let handle = active.remove(id).ok_or_else(|| CraneError::InvalidState {
@@ -157,8 +159,14 @@ impl QueueManager {
             to: "paused".to_string(),
         })?;
 
+        // Snapshot live progress from atomic counters before stopping
+        let snap = handle.progress(id);
+
         handle.pause().await;
 
+        // Flush progress to DB so resume picks up from the exact pause point
+        self.db
+            .update_download_progress(id, snap.downloaded_size, snap.speed)?;
         self.db
             .update_download_status(id, DownloadStatus::Paused, None, None)?;
 
@@ -440,7 +448,27 @@ impl QueueManager {
         let dl = self.db.get_download(id)?;
         let url = dl.url.clone();
 
-        let on_progress = move |_progress: &DownloadProgress| {};
+        // Debounced progress flush to DB every 5s
+        let db_for_progress = self.db.clone();
+        let id_for_progress = id.to_string();
+        let last_flush = Arc::new(std::sync::Mutex::new(Instant::now()));
+        let last_flushed_bytes = Arc::new(AtomicU64::new(0));
+        let on_progress = move |progress: &DownloadProgress| {
+            let mut last = last_flush.lock().unwrap();
+            if last.elapsed().as_secs() >= 5 {
+                let prev = last_flushed_bytes.load(Ordering::Relaxed);
+                // Only flush if progress actually moved forward
+                if progress.downloaded_size > prev {
+                    let _ = db_for_progress.update_download_progress(
+                        &id_for_progress,
+                        progress.downloaded_size,
+                        progress.speed,
+                    );
+                    last_flushed_bytes.store(progress.downloaded_size, Ordering::Relaxed);
+                }
+                *last = Instant::now();
+            }
+        };
 
         let handle =
             start_download(&url, save_path, options, on_progress, Some(self.limiter.clone()))

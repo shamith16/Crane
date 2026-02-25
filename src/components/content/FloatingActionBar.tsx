@@ -23,6 +23,7 @@ type ActionDef = {
 };
 
 function getActions(statuses: DownloadStatus[]): ActionDef[] {
+  const multi = statuses.length > 1;
   const allActive = statuses.every((s) => s === "downloading" || s === "analyzing");
   const allPaused = statuses.every((s) => s === "paused");
   const allCompleted = statuses.every((s) => s === "completed");
@@ -31,32 +32,37 @@ function getActions(statuses: DownloadStatus[]): ActionDef[] {
   const actions: ActionDef[] = [];
 
   if (allPaused) {
-    actions.push({ id: "resume", label: "Resume All", icon: Play, accent: true });
-    actions.push({ id: "cancel", label: "Cancel", icon: X });
+    actions.push({ id: "resume", label: multi ? "Resume All" : "Resume", icon: Play, accent: true });
+    actions.push({ id: "cancel", label: "Cancel", icon: X, color: "text-error" });
   } else if (allActive) {
-    actions.push({ id: "pause", label: "Pause All", icon: Pause, accent: true });
-    actions.push({ id: "cancel", label: "Cancel", icon: X });
+    actions.push({ id: "pause", label: multi ? "Pause All" : "Pause", icon: Pause, accent: true });
+    actions.push({ id: "cancel", label: "Cancel", icon: X, color: "text-error" });
   } else if (allCompleted) {
-    actions.push({ id: "open", label: "Open All", icon: FolderOpen, accent: true });
+    actions.push({ id: "open", label: multi ? "Open All" : "Open", icon: FolderOpen, accent: true });
+    actions.push({ id: "remove", label: "Remove", icon: Trash2, color: "text-error" });
   } else if (allFailed) {
-    actions.push({ id: "retry", label: "Retry All", icon: RotateCcw, accent: true });
+    actions.push({ id: "retry", label: multi ? "Retry All" : "Retry", icon: RotateCcw, accent: true });
+    actions.push({ id: "remove", label: "Remove", icon: Trash2, color: "text-error" });
   } else {
     const hasActive = statuses.some((s) => s === "downloading" || s === "analyzing");
     const hasPaused = statuses.some((s) => s === "paused");
     if (hasActive) actions.push({ id: "pause", label: "Pause All", icon: Pause });
     if (hasPaused) actions.push({ id: "resume", label: "Resume All", icon: Play });
+    actions.push({ id: "remove", label: "Remove", icon: Trash2, color: "text-error" });
   }
-
-  actions.push({ id: "remove", label: "Remove", icon: Trash2, color: "text-error" });
 
   return actions;
 }
 
 const FloatingActionBar: Component = () => {
-  const { selectedIds, selectedDownloads, clearSelection } = useDownloads();
+  const { state, selectedIds, selectedDownloads, clearSelection, refreshDownloads } = useDownloads();
 
   const count = () => selectedIds().size;
-  const statuses = () => selectedDownloads().map((d) => d.status);
+  // Read statuses from base downloads — status doesn't change with progress ticks
+  const statuses = () => {
+    const ids = selectedIds();
+    return state.downloads.filter((d) => ids.has(d.id)).map((d) => d.status);
+  };
   const actions = () => getActions(statuses());
 
   const execAction = async (actionId: string) => {
@@ -67,10 +73,12 @@ const FloatingActionBar: Component = () => {
     try {
       switch (actionId) {
         case "pause":
-          await pauseAllDownloads();
+          if (ids.length === 1) await pauseDownload(ids[0]);
+          else await pauseAllDownloads();
           break;
         case "resume":
-          await resumeAllDownloads();
+          if (ids.length === 1) await resumeDownload(ids[0]);
+          else await resumeAllDownloads();
           break;
         case "cancel":
           await Promise.all(ids.map((id) => cancelDownload(id)));
@@ -91,6 +99,7 @@ const FloatingActionBar: Component = () => {
           clearSelection();
           break;
       }
+      refreshDownloads();
     } catch (e) {
       console.error("[crane] bulk action failed:", e);
     }
@@ -99,7 +108,7 @@ const FloatingActionBar: Component = () => {
   return (
     <Show when={count() > 0}>
       <div
-        class="absolute bottom-[16px] left-1/2 -translate-x-1/2 z-10 flex items-center gap-[16px] rounded-[12px] bg-surface border border-accent px-[20px] py-[10px]"
+        class="absolute bottom-[16px] left-1/2 -translate-x-1/2 z-10 flex items-center flex-nowrap gap-[12px] rounded-[12px] bg-surface border border-accent px-[16px] py-[8px]"
         style={{ "box-shadow": "0 4px 20px #22D3EE20" }}
       >
         <span class="text-[12px] font-mono font-semibold text-accent whitespace-nowrap">
@@ -111,7 +120,7 @@ const FloatingActionBar: Component = () => {
         <For each={actions()}>
           {(action) => (
             <button
-              class={`flex items-center gap-[6px] rounded-md px-[12px] py-[6px] text-[11px] font-mono font-semibold cursor-pointer transition-colors ${
+              class={`flex items-center gap-[6px] rounded-md px-[12px] py-[6px] text-[11px] font-mono font-semibold whitespace-nowrap cursor-pointer transition-colors ${
                 action.accent
                   ? "bg-accent text-inverted hover:bg-accent/80"
                   : `bg-inset ${action.color ?? "text-secondary"} hover:bg-hover`

@@ -82,7 +82,7 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
           <div class="flex flex-col items-center justify-center gap-[4px] w-[64px] h-[80px] rounded-md bg-inset shrink-0">
             {icon()({ size: 24, class: "text-accent" })}
             <Show when={ext()}>
-              <span class="text-[9px] font-mono font-bold text-accent tracking-[1px]">
+              <span class="text-micro font-mono font-bold text-accent tracking-[1px]">
                 {ext()}
               </span>
             </Show>
@@ -113,7 +113,7 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
             <div class="flex items-center gap-[8px] flex-wrap">
               {/* Resumable */}
               <span
-                class={`flex items-center gap-[4px] rounded px-[8px] py-[3px] text-[10px] font-mono font-semibold ${
+                class={`flex items-center gap-[4px] rounded px-[8px] py-[3px] text-mini font-mono font-semibold ${
                   props.analysis.resumable
                     ? "bg-success/20 text-success"
                     : "bg-error/20 text-error"
@@ -126,14 +126,14 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
               </span>
 
               {/* Category */}
-              <span class="flex items-center gap-[4px] rounded bg-accent/15 px-[8px] py-[3px] text-[10px] font-mono font-semibold text-accent">
+              <span class="flex items-center gap-[4px] rounded bg-accent/15 px-[8px] py-[3px] text-mini font-mono font-semibold text-accent">
                 {icon()({ size: 12 })}
                 {props.analysis.category.charAt(0).toUpperCase() + props.analysis.category.slice(1)}
               </span>
 
               {/* Server */}
               <Show when={props.analysis.server}>
-                <span class="flex items-center gap-[4px] rounded bg-inset px-[8px] py-[3px] text-[10px] font-mono font-semibold text-muted">
+                <span class="flex items-center gap-[4px] rounded bg-inset px-[8px] py-[3px] text-mini font-mono font-semibold text-muted">
                   <Server size={12} />
                   {props.analysis.server}
                 </span>
@@ -141,7 +141,7 @@ const ConfirmState: Component<ConfirmStateProps> = (props) => {
             </div>
 
             {/* Source URL */}
-            <p class="text-[10px] font-mono text-muted truncate">
+            <p class="text-mini font-mono text-muted truncate">
               {props.analysis.url}
             </p>
           </div>

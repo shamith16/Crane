@@ -64,13 +64,18 @@ function iconColor(status: Download["status"]): string {
 }
 
 const DownloadRow: Component<DownloadRowProps> = (props) => {
-  const { selectedIds, selectOne, toggleSelect, rangeSelect } = useDownloads();
+  const { selectedIds, selectOne, toggleSelect, rangeSelect, getProgress } = useDownloads();
   const { setDetailPanelVisible } = useLayout();
 
   const dl = () => props.download;
   const icon = () => categoryIcons[dl().category] ?? File;
   const isActive = () => dl().status === "downloading" || dl().status === "analyzing";
   const isSelected = () => selectedIds().has(dl().id);
+
+  // Read progress directly from store for fine-grained reactivity
+  const liveSpeed = () => getProgress(dl().id)?.speed ?? dl().speed;
+  const liveDownloaded = () => getProgress(dl().id)?.downloaded_size ?? dl().downloaded_size;
+  const liveTotalSize = () => getProgress(dl().id)?.total_size ?? dl().total_size;
 
   const handleClick = (e: MouseEvent) => {
     if (e.shiftKey) {
@@ -93,28 +98,34 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
   };
 
   const percent = () => {
-    if (!dl().total_size || dl().total_size === 0) return 0;
-    return (dl().downloaded_size / dl().total_size!) * 100;
+    const total = liveTotalSize();
+    if (!total || total === 0) return 0;
+    return (liveDownloaded() / total) * 100;
   };
 
   const sizeLabel = () => {
     if (isActive() || dl().status === "queued" || dl().status === "paused") {
-      const downloaded = formatSize(dl().downloaded_size);
-      const total = dl().total_size != null ? formatSize(dl().total_size!) : "??";
+      const downloaded = formatSize(liveDownloaded());
+      const total = liveTotalSize() != null ? formatSize(liveTotalSize()!) : "??";
       return `${downloaded} / ${total}`;
     }
-    return dl().total_size != null ? formatSize(dl().total_size!) : formatSize(dl().downloaded_size);
+    return liveTotalSize() != null ? formatSize(liveTotalSize()!) : formatSize(liveDownloaded());
   };
 
   const etaSeconds = () => {
-    if (!isActive() || dl().speed === 0 || !dl().total_size) return null;
-    return Math.round((dl().total_size! - dl().downloaded_size) / dl().speed);
+    const speed = liveSpeed();
+    const total = liveTotalSize();
+    if (!isActive() || speed === 0 || !total) return null;
+    return Math.round((total - liveDownloaded()) / speed);
   };
+
+  const isCompleted = () => dl().status === "completed";
+  const filenameColor = () => isCompleted() ? "text-secondary" : "text-primary";
 
   return (
     <div
       class={`flex flex-col gap-[8px] rounded-md bg-surface p-[10px_12px] cursor-pointer transition-colors hover:bg-hover ${
-        isSelected() ? "ring-1 ring-accent" : ""
+        isSelected() ? "border border-accent" : "border border-transparent"
       }`}
       onClick={handleClick}
     >
@@ -129,37 +140,47 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
           <div class="overflow-hidden" onMouseEnter={checkOverflow} onMouseLeave={() => setIsOverflowing(false)}>
             <p
               ref={nameRef}
-              class={`text-body font-medium text-primary truncate ${isOverflowing() ? "animate-marquee !w-max" : ""}`}
+              class={`text-body font-medium ${filenameColor()} truncate ${isOverflowing() ? "animate-marquee !w-max" : ""}`}
             >
               {dl().filename}
             </p>
           </div>
 
-          {/* Meta row */}
+          {/* Meta row — order matches Pencil per status */}
           <div class="flex items-center gap-[12px] font-mono">
-            <Show when={isActive() && dl().speed > 0}>
-              <span class="text-caption font-semibold text-accent">{formatSpeed(dl().speed)}</span>
+            {/* Active: speed, ETA, size, source */}
+            <Show when={isActive() && liveSpeed() > 0}>
+              <span class="text-caption font-semibold text-accent">{formatSpeed(liveSpeed())}</span>
             </Show>
 
             <Show when={isActive() && etaSeconds() !== null}>
               <span class="text-caption font-medium text-muted">{formatEta(etaSeconds()!)}</span>
             </Show>
 
-            <Show when={dl().status === "completed"}>
-              <span class="text-caption font-semibold text-success">Complete</span>
-            </Show>
-
-            <Show when={dl().status === "failed"}>
-              <span class="text-caption font-semibold text-error">Failed</span>
-            </Show>
-
+            {/* Queued/Paused: size first, then status */}
             <Show when={dl().status === "queued" || dl().status === "paused"}>
+              <span class="text-caption font-medium text-secondary">{sizeLabel()}</span>
               <span class="text-caption font-medium text-muted">
-                {dl().status === "paused" ? "Paused" : "Waiting"}
+                {dl().status === "paused" ? "⏸ Paused" : "○ Waiting"}
               </span>
             </Show>
 
-            <span class="text-caption font-medium text-secondary">{sizeLabel()}</span>
+            {/* Completed: status first, then size */}
+            <Show when={isCompleted()}>
+              <span class="text-caption font-semibold text-success">✓ Complete</span>
+              <span class="text-caption font-medium text-secondary">{sizeLabel()}</span>
+            </Show>
+
+            {/* Failed: status first, then size */}
+            <Show when={dl().status === "failed"}>
+              <span class="text-caption font-semibold text-error">✗ Failed</span>
+              <span class="text-caption font-medium text-secondary">{sizeLabel()}</span>
+            </Show>
+
+            {/* Active: size after speed/ETA */}
+            <Show when={isActive()}>
+              <span class="text-caption font-medium text-secondary">{sizeLabel()}</span>
+            </Show>
 
             <Show when={dl().source_domain}>
               <span class="text-caption text-muted">{dl().source_domain}</span>

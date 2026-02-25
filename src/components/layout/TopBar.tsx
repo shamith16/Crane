@@ -1,8 +1,10 @@
 import { createSignal, Show, type Component } from "solid-js";
 import { Link, ClipboardPaste } from "lucide-solid";
+import { useDownloads } from "../../stores/downloads";
 import DownloadDialog from "../dialog/DownloadDialog";
 
 const TopBar: Component = () => {
+  const { refreshDownloads } = useDownloads();
   const [url, setUrl] = createSignal("");
   const [dialogUrl, setDialogUrl] = createSignal<string | null>(null);
 
@@ -22,6 +24,7 @@ const TopBar: Component = () => {
 
   const handleAdded = () => {
     setUrl("");
+    refreshDownloads();
   };
 
   return (
@@ -32,7 +35,7 @@ const TopBar: Component = () => {
         <input
           type="text"
           placeholder="Paste URL to start download..."
-          class="flex-1 bg-transparent text-body text-primary placeholder:text-muted outline-none"
+          class="flex-1 bg-transparent text-body font-mono text-primary placeholder:text-muted outline-none"
           value={url()}
           onInput={(e) => setUrl(e.currentTarget.value)}
           onKeyDown={handleKeyDown}
@@ -43,7 +46,7 @@ const TopBar: Component = () => {
           onClick={submit}
         >
           <ClipboardPaste size={14} />
-          <span class="text-caption font-semibold tracking-wider">ADD URL</span>
+          <span class="text-caption font-mono font-semibold tracking-[1px]">ADD URL</span>
         </button>
       </div>
 

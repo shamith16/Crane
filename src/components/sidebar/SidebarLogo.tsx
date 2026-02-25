@@ -10,7 +10,7 @@ const SidebarLogo: Component = () => {
     <div class={`flex items-center h-[22px] ${sidebarExpanded() ? "gap-sm" : "justify-center"}`}>
       <CloudDownload size={18} class="text-accent shrink-0" />
       <Show when={sidebarExpanded()}>
-        <span class="text-body-lg font-bold text-primary tracking-wider">CRANE</span>
+        <span class="text-brand font-mono font-bold text-primary tracking-[3px]">CRANE</span>
       </Show>
     </div>
   );

@@ -29,7 +29,7 @@ const SidebarItem: Component<SidebarItemProps> = (props) => {
       <Show when={sidebarExpanded()}>
         <span class="text-body-sm flex-1 text-left truncate">{props.label}</span>
         <Show when={props.count !== undefined}>
-          <span class={`text-caption tabular-nums ${props.active ? "text-accent" : "text-muted"}`}>
+          <span class={`text-caption font-mono font-semibold tabular-nums ${props.active ? "text-accent" : "text-muted"}`}>
             {props.count}
           </span>
         </Show>

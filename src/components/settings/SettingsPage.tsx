@@ -38,7 +38,7 @@ const SettingsPage: Component = () => {
         </button>
         <h1 class="text-title font-semibold text-primary">Settings</h1>
         <div class="flex-1" />
-        <kbd class="inline-flex items-center gap-[4px] text-[10px] font-mono text-muted">
+        <kbd class="inline-flex items-center gap-[4px] text-mini font-mono text-muted">
           <span class="px-[4px] py-[1px] rounded bg-surface border border-border">⌘</span>
           <span class="px-[4px] py-[1px] rounded bg-surface border border-border">,</span>
         </kbd>

@@ -17,7 +17,7 @@ const RowView: Component<{ connections: ConnectionProgress[] }> = (props) => (
     <For each={props.connections}>
       {(conn) => (
         <div class="flex items-center gap-[6px]">
-          <span class="text-[10px] font-mono font-medium text-muted w-[20px] shrink-0">
+          <span class="text-mini font-mono font-medium text-muted w-[20px] shrink-0">
             #{conn.connection_num}
           </span>
           <div class="flex-1 h-[4px] rounded-sm bg-surface overflow-hidden">
@@ -26,7 +26,7 @@ const RowView: Component<{ connections: ConnectionProgress[] }> = (props) => (
               style={{ width: `${percent(conn)}%` }}
             />
           </div>
-          <span class="text-[10px] font-mono font-medium text-secondary w-[28px] text-right shrink-0">
+          <span class="text-mini font-mono font-medium text-secondary w-[28px] text-right shrink-0">
             {percent(conn)}%
           </span>
         </div>
@@ -83,7 +83,7 @@ const ConnectionSegments: Component<ConnectionSegmentsProps> = (props) => {
           Segments
         </span>
         <Show when={count() > 8}>
-          <span class="text-[10px] font-mono text-muted">{count()} connections</span>
+          <span class="text-mini font-mono font-medium text-muted">{count()} connections</span>
         </Show>
       </div>
       <Show when={count() <= 8} fallback={<GridView connections={props.connections} />}>
