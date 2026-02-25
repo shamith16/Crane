@@ -428,6 +428,90 @@ impl Database {
         Ok(count as u64)
     }
 
+    /// Find the most recent failed download for a given URL.
+    /// Returns `None` if no failed download exists for this URL.
+    pub fn find_failed_download(&self, url: &str) -> Result<Option<Download>, CraneError> {
+        let sql = format!(
+            "{SELECT_ALL_COLUMNS} WHERE url = ?1 AND status = 'failed' \
+             ORDER BY created_at DESC LIMIT 1"
+        );
+        let conn = self.conn();
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| CraneError::Database(e.to_string()))?;
+
+        let mut rows = stmt
+            .query_map(params![url], |row| {
+                row_to_download(row).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })
+            })
+            .map_err(|e| CraneError::Database(e.to_string()))?;
+
+        match rows.next() {
+            Some(result) => Ok(Some(
+                result.map_err(|e| CraneError::Database(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
+    }
+
+    /// Update a failed download's metadata for smart retry.
+    /// Resets progress and error state, updates options from fresh analysis.
+    pub fn update_download_for_retry(
+        &self,
+        id: &str,
+        filename: &str,
+        save_path: &str,
+        total_size: Option<u64>,
+        mime_type: Option<&str>,
+        category: &str,
+        resumable: bool,
+        connections: u32,
+    ) -> Result<(), CraneError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let rows = self
+            .conn()
+            .execute(
+                "UPDATE downloads SET
+                    filename = ?1,
+                    save_path = ?2,
+                    total_size = ?3,
+                    mime_type = ?4,
+                    category = ?5,
+                    resumable = ?6,
+                    connections = ?7,
+                    downloaded_size = 0,
+                    error_message = NULL,
+                    error_code = NULL,
+                    retry_count = 0,
+                    speed = 0.0,
+                    updated_at = ?8
+                WHERE id = ?9",
+                params![
+                    filename,
+                    save_path,
+                    total_size.map(|v| v as i64),
+                    mime_type,
+                    category,
+                    resumable as i64,
+                    connections as i64,
+                    now,
+                    id,
+                ],
+            )
+            .map_err(|e| CraneError::Database(e.to_string()))?;
+
+        if rows == 0 {
+            return Err(CraneError::NotFound(id.to_string()));
+        }
+        Ok(())
+    }
+
     /// Get the maximum queue position among queued downloads.
     pub fn get_max_queue_position(&self) -> Result<Option<u32>, CraneError> {
         let result: Option<i64> = self
@@ -801,5 +885,91 @@ mod tests {
         dl3.url = url.to_string();
         db.insert_download(&dl3).unwrap();
         assert!(db.has_active_url(url).unwrap());
+    }
+
+    #[test]
+    fn test_find_failed_download() {
+        let db = Database::open_in_memory().unwrap();
+        let url = "https://example.com/bigfile.zip";
+
+        // No failed downloads → None
+        assert!(db.find_failed_download(url).unwrap().is_none());
+
+        // Insert a failed download
+        let mut dl = make_test_download("fail-1", DownloadStatus::Failed);
+        dl.url = url.to_string();
+        dl.total_size = Some(5000);
+        db.insert_download(&dl).unwrap();
+
+        let found = db.find_failed_download(url).unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "fail-1");
+
+        // Non-failed download with same URL should not be returned
+        let mut dl2 = make_test_download("active-1", DownloadStatus::Downloading);
+        dl2.url = url.to_string();
+        db.insert_download(&dl2).unwrap();
+
+        let found = db.find_failed_download(url).unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "fail-1"); // still returns the failed one
+
+        // Different URL should not match
+        assert!(db.find_failed_download("https://other.com/file").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_find_failed_download_returns_most_recent() {
+        let db = Database::open_in_memory().unwrap();
+        let url = "https://example.com/bigfile.zip";
+
+        let mut dl1 = make_test_download("fail-old", DownloadStatus::Failed);
+        dl1.url = url.to_string();
+        dl1.created_at = "2026-01-01T00:00:00Z".to_string();
+        db.insert_download(&dl1).unwrap();
+
+        let mut dl2 = make_test_download("fail-new", DownloadStatus::Failed);
+        dl2.url = url.to_string();
+        dl2.created_at = "2026-02-01T00:00:00Z".to_string();
+        db.insert_download(&dl2).unwrap();
+
+        let found = db.find_failed_download(url).unwrap().unwrap();
+        assert_eq!(found.id, "fail-new");
+    }
+
+    #[test]
+    fn test_update_download_for_retry() {
+        let db = Database::open_in_memory().unwrap();
+
+        let mut dl = make_test_download("retry-1", DownloadStatus::Failed);
+        dl.downloaded_size = 500;
+        dl.error_message = Some("timeout".to_string());
+        dl.error_code = Some("E001".to_string());
+        dl.retry_count = 3;
+        db.insert_download(&dl).unwrap();
+
+        db.update_download_for_retry(
+            "retry-1",
+            "newname.zip",
+            "/tmp/newname.zip",
+            Some(2048),
+            Some("application/zip"),
+            "archives",
+            true,
+            16,
+        )
+        .unwrap();
+
+        let updated = db.get_download("retry-1").unwrap();
+        assert_eq!(updated.filename, "newname.zip");
+        assert_eq!(updated.save_path, "/tmp/newname.zip");
+        assert_eq!(updated.total_size, Some(2048));
+        assert_eq!(updated.mime_type.as_deref(), Some("application/zip"));
+        assert!(updated.resumable);
+        assert_eq!(updated.connections, 16);
+        assert_eq!(updated.downloaded_size, 0);
+        assert!(updated.error_message.is_none());
+        assert!(updated.error_code.is_none());
+        assert_eq!(updated.retry_count, 0);
     }
 }

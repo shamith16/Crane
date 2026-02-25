@@ -78,7 +78,6 @@ impl QueueManager {
         // Analyze URL to get metadata (filename, size, mime, etc.)
         let analysis = analyze_url(url).await?;
 
-        let id = uuid::Uuid::new_v4().to_string();
         let raw_filename = options
             .filename
             .clone()
@@ -96,6 +95,68 @@ impl QueueManager {
         if !canonical_path.starts_with(&canonical_dir) {
             return Err(CraneError::PathTraversal(filename));
         }
+
+        let category = options
+            .category
+            .clone()
+            .unwrap_or_else(|| analysis.category.clone());
+        let connections = options.connections.unwrap_or(8);
+
+        // Smart retry: if a failed download exists for this URL with matching
+        // file identity (total_size + filename), reuse it instead of creating
+        // a new row. This preserves partial chunk data for resumable servers.
+        if let Some(failed) = self.db.find_failed_download(url)? {
+            let size_matches = match (failed.total_size, analysis.total_size) {
+                (Some(a), Some(b)) => a == b,
+                // If either is unknown, can't confirm mismatch — allow retry
+                _ => true,
+            };
+            let name_matches = failed.filename == analysis.filename;
+
+            if size_matches && name_matches {
+                let id = failed.id.clone();
+                self.db.update_download_for_retry(
+                    &id,
+                    &filename,
+                    &save_path.to_string_lossy(),
+                    analysis.total_size,
+                    analysis.mime_type.as_deref(),
+                    category.as_str(),
+                    analysis.resumable,
+                    connections,
+                )?;
+                self.db
+                    .update_download_status(&id, DownloadStatus::Pending, None, None)?;
+
+                let retry_options = DownloadOptions {
+                    filename: Some(filename),
+                    connections: Some(connections),
+                    category: Some(category),
+                    referrer: options.referrer,
+                    cookies: options.cookies,
+                    user_agent: options.user_agent,
+                    headers: options.headers,
+                    expected_hash: options.expected_hash,
+                    ..Default::default()
+                };
+
+                let mut active = self.active.lock().await;
+                if (active.len() as u32) < self.max_concurrent {
+                    self.start_download_internal(&id, &save_path, &retry_options, &mut active)
+                        .await?;
+                } else {
+                    let max_pos = self.db.get_max_queue_position()?.unwrap_or(0);
+                    self.db.update_queue_position(&id, Some(max_pos + 1))?;
+                    self.db
+                        .update_download_status(&id, DownloadStatus::Queued, None, None)?;
+                }
+
+                return Ok(id);
+            }
+        }
+
+        // No reusable failed download — create a new row
+        let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
         let download = Download {
@@ -109,12 +170,9 @@ impl QueueManager {
             error_message: None,
             error_code: None,
             mime_type: analysis.mime_type.clone(),
-            category: options
-                .category
-                .clone()
-                .unwrap_or_else(|| analysis.category.clone()),
+            category,
             resumable: analysis.resumable,
-            connections: options.connections.unwrap_or(8),
+            connections,
             speed: 0.0,
             source_domain: url::Url::parse(url)
                 .ok()
