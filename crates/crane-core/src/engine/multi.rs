@@ -826,13 +826,15 @@ async fn write_chunk_checksum(chunk_path: &Path) -> Result<(), CraneError> {
     Ok(())
 }
 
-/// Verify a chunk file against its CRC32 sidecar. Returns true if valid,
-/// false if the sidecar is missing or the checksum doesn't match.
+/// Verify a chunk file against its CRC32 sidecar. Returns true if valid
+/// or if the sidecar is missing (partial chunk from pause — not corrupt).
+/// Returns false only when the sidecar exists but the checksum doesn't match.
 async fn verify_chunk_checksum(chunk_path: &Path) -> bool {
     let sidecar_path = chunk_path.with_extension("crc32");
     let expected_bytes = match tokio::fs::read(&sidecar_path).await {
         Ok(b) if b.len() == 4 => b,
-        _ => return false,
+        Ok(_) => return false, // Malformed sidecar
+        Err(_) => return true, // No sidecar = partial chunk from pause, treat as valid
     };
     let expected = u32::from_le_bytes([
         expected_bytes[0],

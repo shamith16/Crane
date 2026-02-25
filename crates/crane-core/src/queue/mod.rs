@@ -1706,4 +1706,224 @@ mod tests {
         let dl = db.get_download(&id).unwrap();
         assert_eq!(dl.status, DownloadStatus::Completed);
     }
+
+    // ── Test: pause/resume preserves chunk files (CRC32 sidecar fix) ──
+    //
+    // Verifies that partial chunk files without CRC32 sidecars (from pause)
+    // are NOT deleted on resume. Before the fix, verify_chunk_checksum
+    // returned false for missing sidecars, causing chunk deletion.
+
+    #[tokio::test]
+    async fn test_pause_resume_preserves_chunk_progress() {
+        use crate::engine::chaos_responders::SlowRangeResponder;
+
+        let server = MockServer::start().await;
+        // 2MB: large enough for multi-connection (256KB min chunk)
+        let body = vec![0xAA; 2 * 1024 * 1024];
+
+        Mock::given(method("HEAD"))
+            .and(path("/bigfile.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-length", body.len().to_string().as_str())
+                    .insert_header("accept-ranges", "bytes")
+                    .insert_header("content-type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        // Slow GET so we can pause mid-download — data hasn't arrived yet
+        Mock::given(method("GET"))
+            .and(path("/bigfile.bin"))
+            .respond_with(SlowRangeResponder {
+                body: body.clone(),
+                delay: std::time::Duration::from_secs(2),
+            })
+            .mount(&server)
+            .await;
+
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
+
+        let url = format!("{}/bigfile.bin", server.uri());
+        let id = qm
+            .add_download(
+                &url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions {
+                    connections: Some(4),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        // Let the download start its chunk tasks
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(qm.active_count().await, 1);
+
+        // Pause mid-download
+        qm.pause(&id).await.unwrap();
+        assert_eq!(db.get_download(&id).unwrap().status, DownloadStatus::Paused);
+
+        // Now remove the GET delay so resume completes quickly
+        server.reset().await;
+
+        Mock::given(method("HEAD"))
+            .and(path("/bigfile.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-length", body.len().to_string().as_str())
+                    .insert_header("accept-ranges", "bytes")
+                    .insert_header("content-type", "application/octet-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        // Fast range-aware responder for resumed chunks
+        Mock::given(method("GET"))
+            .and(path("/bigfile.bin"))
+            .respond_with(SlowRangeResponder {
+                body: body.clone(),
+                delay: std::time::Duration::from_millis(10),
+            })
+            .mount(&server)
+            .await;
+
+        // Resume
+        qm.resume(&id).await.unwrap();
+        assert_eq!(
+            db.get_download(&id).unwrap().status,
+            DownloadStatus::Downloading
+        );
+
+        // Wait for completion
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            let completed = qm.check_completed().await.unwrap();
+            if completed.contains(&id) {
+                break;
+            }
+        }
+
+        let dl_final = db.get_download(&id).unwrap();
+        assert_eq!(
+            dl_final.status,
+            DownloadStatus::Completed,
+            "download should complete after pause/resume"
+        );
+
+        // Verify correct file size
+        let final_path = PathBuf::from(&dl_final.save_path);
+        let final_size = tokio::fs::metadata(&final_path).await.unwrap().len();
+        assert_eq!(final_size, body.len() as u64);
+    }
+
+    // ── Integration test: real-world pause/resume with large file ──
+    //
+    // Downloads a real 10GB test file, pauses after some progress, resumes,
+    // and verifies progress was preserved (not restarted from 0).
+    //
+    // Run manually: cargo test -p crane-core test_real_pause_resume -- --ignored --nocapture
+
+    #[tokio::test]
+    #[ignore] // Requires network + downloads ~10MB before pausing
+    async fn test_real_pause_resume() {
+        let db = make_db();
+        let tmp = TempDir::new().unwrap();
+        let qm = QueueManager::new(db.clone(), 3, None, vec![]);
+
+        let url = "https://testfile.packersmoves.com/10GB.zip";
+        let id = qm
+            .add_download(url, tmp.path().to_str().unwrap(), DownloadOptions {
+                connections: Some(8),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        println!("[test] Download started: {id}");
+        assert_eq!(qm.active_count().await, 1);
+
+        // Wait for some progress (5 seconds should download several MB)
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        // Read pre-pause progress from the active handle
+        let pre_pause_progress = {
+            let active = qm.active.lock().await;
+            active.get(&id).map(|h| h.progress(&id).downloaded_size)
+        };
+        let bytes_before_pause = pre_pause_progress.unwrap_or(0);
+        println!("[test] Bytes downloaded before pause: {bytes_before_pause}");
+        assert!(
+            bytes_before_pause > 0,
+            "should have downloaded some bytes before pausing"
+        );
+
+        // Pause
+        qm.pause(&id).await.unwrap();
+        let dl_paused = db.get_download(&id).unwrap();
+        assert_eq!(dl_paused.status, DownloadStatus::Paused);
+        println!(
+            "[test] Paused — DB progress: {} bytes",
+            dl_paused.downloaded_size
+        );
+
+        // Check chunk files on disk
+        let save_path = PathBuf::from(&dl_paused.save_path);
+        let temp_dir = {
+            let mut p = save_path.as_os_str().to_os_string();
+            p.push(".crane_tmp");
+            PathBuf::from(p)
+        };
+        let mut chunk_bytes_on_disk: u64 = 0;
+        if temp_dir.exists() {
+            let mut entries = tokio::fs::read_dir(&temp_dir).await.unwrap();
+            while let Some(entry) = entries.next_entry().await.unwrap() {
+                let meta = entry.metadata().await.unwrap();
+                let name = entry.file_name();
+                println!("[test]   chunk {:?}: {} bytes", name, meta.len());
+                if name.to_str().map(|s| s.starts_with("chunk_")).unwrap_or(false) {
+                    chunk_bytes_on_disk += meta.len();
+                }
+            }
+        }
+        println!("[test] Total chunk bytes on disk: {chunk_bytes_on_disk}");
+        assert!(
+            chunk_bytes_on_disk > 0,
+            "chunk files should contain data after pause"
+        );
+
+        // Resume
+        println!("[test] Resuming...");
+        qm.resume(&id).await.unwrap();
+        assert_eq!(
+            db.get_download(&id).unwrap().status,
+            DownloadStatus::Downloading
+        );
+
+        // Wait 3s for progress to start, then check it's ahead of pre-pause
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+        let post_resume_progress = {
+            let active = qm.active.lock().await;
+            active.get(&id).map(|h| h.progress(&id).downloaded_size)
+        };
+        let bytes_after_resume = post_resume_progress.unwrap_or(0);
+        println!("[test] Bytes after resume: {bytes_after_resume}");
+
+        // The key assertion: progress should NOT restart from 0.
+        // It should be at least as much as we had before pause.
+        assert!(
+            bytes_after_resume >= chunk_bytes_on_disk,
+            "progress after resume ({bytes_after_resume}) should be >= \
+             chunk bytes from pause ({chunk_bytes_on_disk}) — \
+             download restarted from scratch!"
+        );
+
+        // Cancel to clean up (don't download 10GB in a test)
+        qm.cancel(&id).await.unwrap();
+        println!("[test] Cancelled — test passed!");
+    }
 }

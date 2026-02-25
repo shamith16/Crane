@@ -191,6 +191,40 @@ impl wiremock::Respond for FailThenSucceedResponder {
     }
 }
 
+/// Range-aware responder with a configurable delay per request.
+/// Handles both full-body GET and byte-range GET (206 Partial Content).
+/// The delay gives tests enough time to pause a download mid-transfer.
+pub struct SlowRangeResponder {
+    pub body: Vec<u8>,
+    pub delay: std::time::Duration,
+}
+
+impl wiremock::Respond for SlowRangeResponder {
+    fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+        if let Some(range_header) = request.headers.get(&reqwest::header::RANGE) {
+            let range_str = range_header.to_str().unwrap();
+            let range = range_str.trim_start_matches("bytes=");
+            let parts: Vec<&str> = range.split('-').collect();
+            let start: usize = parts[0].parse().unwrap();
+            let end: usize = parts[1].parse().unwrap();
+            let slice = &self.body[start..=end];
+            wiremock::ResponseTemplate::new(206)
+                .set_body_bytes(slice.to_vec())
+                .insert_header("Content-Length", slice.len().to_string().as_str())
+                .insert_header(
+                    "Content-Range",
+                    format!("bytes {start}-{end}/{}", self.body.len()).as_str(),
+                )
+                .set_delay(self.delay)
+        } else {
+            wiremock::ResponseTemplate::new(200)
+                .set_body_bytes(self.body.clone())
+                .insert_header("Content-Length", self.body.len().to_string().as_str())
+                .set_delay(self.delay)
+        }
+    }
+}
+
 /// Range-aware responder that fails the first N requests for a specific chunk,
 /// then serves the correct range data. Used for multi-connection retry tests.
 pub struct IntermittentRangeResponder {
