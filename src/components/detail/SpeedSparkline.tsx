@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createEffect, createSignal, type Component } from "solid-js";
+import { onMount, onCleanup, createEffect, createSignal, Show, type Component } from "solid-js";
 import { SolidUplot } from "@dschz/solid-uplot";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
@@ -19,6 +19,12 @@ function formatSpeed(bytesPerSec: number): string {
   return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
 }
 
+function readAccent(): string {
+  if (typeof document === "undefined") return "#22D3EE";
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue("--color-accent").trim() || "#22D3EE";
+}
+
 const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
   const maxSamples = () => props.maxSamples ?? 120;
 
@@ -30,6 +36,7 @@ const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
 
   const [chartData, setChartData] = createSignal<[number[], number[]]>([[], []]);
   const [displaySpeed, setDisplaySpeed] = createSignal(0);
+  const [accentColor, setAccentColor] = createSignal(readAccent());
 
   // Track reactive speed without pushing samples
   createEffect(() => {
@@ -37,6 +44,7 @@ const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
   });
 
   onMount(() => {
+    // Sample speed at fixed interval
     intervalId = setInterval(() => {
       const now = Date.now() / 1000 - startTime;
       timePoints.push(now);
@@ -50,17 +58,22 @@ const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
       setDisplaySpeed(latestSpeed);
       setChartData([timePoints.slice(), speedPoints.slice()]);
     }, SAMPLE_INTERVAL);
-  });
 
-  onCleanup(() => {
-    if (intervalId != null) clearInterval(intervalId);
-  });
+    // Watch for accent color changes via style mutations on :root
+    const observer = new MutationObserver(() => {
+      const color = readAccent();
+      if (color !== accentColor()) setAccentColor(color);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
 
-  const accentColor = () => {
-    if (typeof document === "undefined") return "#22D3EE";
-    return getComputedStyle(document.documentElement)
-      .getPropertyValue("--color-accent").trim() || "#22D3EE";
-  };
+    onCleanup(() => {
+      if (intervalId != null) clearInterval(intervalId);
+      observer.disconnect();
+    });
+  });
 
   return (
     <div class="flex flex-col gap-[6px] pt-[4px]">
@@ -74,37 +87,40 @@ const SpeedSparkline: Component<SpeedSparklineProps> = (props) => {
         <span class="text-caption text-muted">current</span>
       </div>
       <div class="rounded-[10px] bg-inset overflow-hidden uplot-sparkline">
-        <SolidUplot
-          data={chartData()}
-          width={280}
-          height={64}
-          cursor={{ show: false }}
-          legend={{ show: false }}
-          scales={{
-            x: { time: false },
-          }}
-          axes={[
-            { show: false },
-            { show: false },
-          ]}
-          series={[
-            {},
-            {
-              stroke: accentColor(),
-              fill: (self: uPlot, seriesIdx: number) => {
-                const ctx = self.ctx;
-                const grad = ctx.createLinearGradient(0, 0, 0, self.height);
-                const color = accentColor();
-                grad.addColorStop(0, color + "30");
-                grad.addColorStop(1, color + "00");
-                return grad;
-              },
-              width: 2,
-              paths: uPlot.paths.spline!(),
-              points: { show: false },
-            },
-          ]}
-        />
+        {/* Keyed on accent so uPlot remounts with fresh series colors */}
+        <Show when={accentColor()} keyed>
+          {(color) => (
+            <SolidUplot
+              data={chartData()}
+              width={280}
+              height={64}
+              cursor={{ show: false }}
+              legend={{ show: false }}
+              scales={{
+                x: { time: false },
+              }}
+              axes={[
+                { show: false },
+                { show: false },
+              ]}
+              series={[
+                {},
+                {
+                  stroke: color,
+                  fill: (self: uPlot) => {
+                    const grad = self.ctx.createLinearGradient(0, 0, 0, self.height);
+                    grad.addColorStop(0, color + "30");
+                    grad.addColorStop(1, color + "00");
+                    return grad;
+                  },
+                  width: 2,
+                  paths: uPlot.paths.spline!(),
+                  points: { show: false },
+                },
+              ]}
+            />
+          )}
+        </Show>
       </div>
     </div>
   );

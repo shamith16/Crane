@@ -1,4 +1,4 @@
-import { Show, Switch, Match, type Component } from "solid-js";
+import { Show, onMount, onCleanup, type Component } from "solid-js";
 import { useLayout } from "./LayoutContext";
 import { useDownloads } from "../../stores/downloads";
 import Sidebar from "./Sidebar";
@@ -9,30 +9,32 @@ import StatusBar from "./StatusBar";
 import SettingsPage from "../settings/SettingsPage";
 
 const AppShell: Component = () => {
-  const { detailPanelVisible, currentPage } = useLayout();
+  const { detailPanelVisible, currentPage, setCurrentPage } = useLayout();
   const { selectedIds } = useDownloads();
 
   const showDetailPanel = () => detailPanelVisible() && selectedIds().size === 1 && currentPage() === "downloads";
+  const settingsOpen = () => currentPage() === "settings";
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+      e.preventDefault();
+      setCurrentPage(settingsOpen() ? "downloads" : "settings");
+    }
+  };
+
+  onMount(() => document.addEventListener("keydown", handleKeyDown));
+  onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
 
   return (
     <div class="flex flex-col h-full">
       {/* Main area: sidebar + center + detail panel */}
       <div class="flex flex-1 min-h-0">
-        <Show when={currentPage() === "downloads"}>
-          <Sidebar />
-        </Show>
+        <Sidebar />
 
-        <Switch>
-          <Match when={currentPage() === "downloads"}>
-            <div class="flex flex-col flex-1 min-w-0">
-              <TopBar />
-              <ContentArea />
-            </div>
-          </Match>
-          <Match when={currentPage() === "settings"}>
-            <SettingsPage />
-          </Match>
-        </Switch>
+        <div class="flex flex-col flex-1 min-w-0">
+          <TopBar />
+          <ContentArea />
+        </div>
 
         <Show when={showDetailPanel()}>
           <DetailPanel />
@@ -41,6 +43,11 @@ const AppShell: Component = () => {
 
       {/* Status bar: always visible, full width */}
       <StatusBar />
+
+      {/* Settings overlay */}
+      <Show when={settingsOpen()}>
+        <SettingsPage onClose={() => setCurrentPage("downloads")} />
+      </Show>
     </div>
   );
 };

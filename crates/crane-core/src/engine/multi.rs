@@ -904,10 +904,14 @@ struct ChunkPlan {
 }
 
 /// Build the temp directory path for chunk storage.
+/// Uses a hidden `.crane/` folder in the parent directory to keep temp files out of sight.
 fn temp_dir_path(save_path: &Path) -> PathBuf {
-    let mut dir_name = save_path.as_os_str().to_os_string();
-    dir_name.push(".crane_tmp");
-    PathBuf::from(dir_name)
+    let parent = save_path.parent().unwrap_or(save_path);
+    let filename = save_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    parent.join(".crane").join(filename.as_ref())
 }
 
 /// Compute chunk boundaries for multi-connection download.

@@ -46,7 +46,7 @@ const Sidebar: Component = () => {
 
   return (
     <aside
-      class="flex flex-col min-h-0 bg-inset border-r border-border transition-all duration-200 ease-in-out shrink-0 overflow-hidden"
+      class="flex flex-col min-h-0 bg-inset transition-all duration-200 ease-in-out shrink-0 overflow-hidden rounded-2xl my-[8px] ml-[8px]"
       style={{ width: sidebarExpanded() ? "240px" : "64px" }}
     >
       {/* Logo */}
@@ -92,6 +92,7 @@ const Sidebar: Component = () => {
         <SidebarItem
           icon={() => <Settings size={18} />}
           label="Settings"
+          trailing={<span class="text-[16px] font-mono font-extrabold text-muted leading-none">⌘<span class="relative -top-[2px]">,</span></span>}
           onClick={() => setCurrentPage("settings")}
         />
       </div>

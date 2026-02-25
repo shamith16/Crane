@@ -79,6 +79,8 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
 
   const handleClick = (e: MouseEvent) => {
     if (e.shiftKey) {
+      e.preventDefault();
+      window.getSelection()?.removeAllRanges();
       rangeSelect(dl().id);
     } else if (e.metaKey || e.ctrlKey) {
       toggleSelect(dl().id);
@@ -124,6 +126,7 @@ const DownloadRow: Component<DownloadRowProps> = (props) => {
 
   return (
     <div
+      data-download-row
       class={`flex flex-col gap-[8px] rounded-md bg-surface p-[10px_12px] cursor-pointer transition-colors hover:bg-hover ${
         isSelected() ? "border border-accent" : "border border-transparent"
       }`}

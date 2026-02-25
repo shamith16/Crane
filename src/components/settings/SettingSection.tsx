@@ -15,7 +15,7 @@ const SettingSection: ParentComponent<SettingSectionProps> = (props) => {
           <p class="text-caption text-muted">{props.description}</p>
         </Show>
       </div>
-      <div class="flex flex-col divide-y divide-border">
+      <div class="flex flex-col gap-[4px]">
         {props.children}
       </div>
     </div>

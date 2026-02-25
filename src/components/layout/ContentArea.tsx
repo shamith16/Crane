@@ -15,7 +15,13 @@ const ContentArea: Component = () => {
   onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
 
   return (
-    <div class="relative flex-1 overflow-y-auto min-h-0">
+    <div
+      class="relative flex-1 overflow-y-auto min-h-0"
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (!target.closest("[data-download-row]")) clearSelection();
+      }}
+    >
       <Show when={hasDownloads()} fallback={<EmptyState />}>
         <DownloadList />
       </Show>

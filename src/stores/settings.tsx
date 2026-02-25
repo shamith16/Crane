@@ -1,11 +1,14 @@
 import {
   createContext,
+  createEffect,
   useContext,
   onMount,
+  onCleanup,
   type ParentComponent,
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { isTauri, getSettings, updateSettings } from "../lib/tauri";
+import { applyAccent, applyTheme } from "../lib/theme";
 import type { AppConfig } from "../types/settings";
 
 const defaultConfig: AppConfig = {
@@ -43,7 +46,7 @@ const defaultConfig: AppConfig = {
   },
   appearance: {
     theme: "dark",
-    accent_color: "#3B82F6",
+    accent_color: "#22D3EE",
     font_size: "default",
     compact_mode: false,
     list_density: "comfortable",
@@ -105,6 +108,18 @@ export const SettingsProvider: ParentComponent = (props) => {
   };
 
   onMount(reload);
+
+  // Apply appearance settings to DOM reactively
+  createEffect(() => applyAccent(config.appearance.accent_color));
+  createEffect(() => applyTheme(config.appearance.theme));
+
+  // Re-apply theme when OS preference changes (for "system" mode)
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const onSystemThemeChange = () => {
+    if (config.appearance.theme === "system") applyTheme("system");
+  };
+  mq.addEventListener("change", onSystemThemeChange);
+  onCleanup(() => mq.removeEventListener("change", onSystemThemeChange));
 
   const store: SettingsStore = {
     get config() { return config; },

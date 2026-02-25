@@ -69,6 +69,28 @@
   --leading-relaxed: 1.65;
 }
 
+/* ─── Light Theme ──────────────────────────── */
+
+:root[data-theme="light"] {
+  --color-page:      #F1F5F9;
+  --color-inset:     #E2E8F0;
+  --color-surface:   #FFFFFF;
+  --color-hover:     #CBD5E1;
+
+  --color-primary:   #0F172A;
+  --color-secondary: #475569;
+  --color-tertiary:  #64748B;
+  --color-muted:     #94A3B8;
+  --color-inverted:  #FFFFFF;
+
+  --color-border:    #CBD5E1;
+  --color-divider:   #E2E8F0;
+
+  --color-error:     #DC2626;
+  --color-success:   #059669;
+  --color-warning:   #D97706;
+}
+
 /* ─── Base Styles ───────────────────────────── */
 
 html, body, #root {

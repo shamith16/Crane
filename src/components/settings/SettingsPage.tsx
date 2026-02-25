@@ -1,6 +1,5 @@
-import { createSignal, Switch, Match, type Component } from "solid-js";
-import { ArrowLeft } from "lucide-solid";
-import { useLayout } from "../layout/LayoutContext";
+import { createSignal, Switch, Match, onMount, onCleanup, type Component } from "solid-js";
+import { X } from "lucide-solid";
 import SettingsNav, { type SettingsTab } from "./SettingsNav";
 import GeneralTab from "./tabs/GeneralTab";
 import DownloadsTab from "./tabs/DownloadsTab";
@@ -22,38 +21,47 @@ const tabTitles: Record<SettingsTab, string> = {
   appearance: "Appearance",
 };
 
-const SettingsPage: Component = () => {
-  const { setCurrentPage } = useLayout();
+interface SettingsPageProps {
+  onClose: () => void;
+}
+
+const SettingsPage: Component<SettingsPageProps> = (props) => {
   const [activeTab, setActiveTab] = createSignal<SettingsTab>("general");
 
-  return (
-    <div class="flex flex-col flex-1 min-h-0">
-      {/* Header */}
-      <div class="flex items-center gap-[12px] px-[24px] py-[16px] border-b border-border shrink-0">
-        <button
-          class="flex items-center justify-center w-[32px] h-[32px] rounded-md text-muted hover:text-primary hover:bg-hover transition-colors cursor-pointer"
-          onClick={() => setCurrentPage("downloads")}
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <h1 class="text-title font-semibold text-primary">Settings</h1>
-        <div class="flex-1" />
-        <kbd class="inline-flex items-center gap-[4px] text-mini font-mono text-muted">
-          <span class="px-[4px] py-[1px] rounded bg-surface border border-border">⌘</span>
-          <span class="px-[4px] py-[1px] rounded bg-surface border border-border">,</span>
-        </kbd>
-      </div>
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") props.onClose();
+  };
 
-      {/* Body: nav + content */}
-      <div class="flex flex-1 min-h-0">
+  onMount(() => document.addEventListener("keydown", handleKeyDown));
+  onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+
+  const handleBackdropClick = (e: MouseEvent) => {
+    if (e.target === e.currentTarget) props.onClose();
+  };
+
+  return (
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-[12px] bg-page/70"
+      onClick={handleBackdropClick}
+    >
+      <div class="flex w-[80%] h-[80%] max-w-[960px] max-h-[640px] rounded-2xl bg-surface shadow-[0_8px_40px_#00000066] overflow-hidden">
         {/* Left nav */}
         <SettingsNav active={activeTab()} onSelect={setActiveTab} />
 
         {/* Right content */}
-        <div class="flex-1 min-w-0 overflow-y-auto p-[32px_40px]">
-          <h2 class="text-heading font-semibold text-primary mb-[20px]">
-            {tabTitles[activeTab()]}
-          </h2>
+        <div class="flex-1 min-w-0 overflow-y-auto p-[28px_32px]">
+          {/* Header */}
+          <div class="flex items-center justify-between mb-[24px]">
+            <h2 class="text-title font-semibold text-primary">
+              {tabTitles[activeTab()]}
+            </h2>
+            <button
+              class="flex items-center justify-center w-[32px] h-[32px] rounded-full text-muted hover:text-primary hover:bg-hover transition-colors cursor-pointer"
+              onClick={props.onClose}
+            >
+              <X size={18} />
+            </button>
+          </div>
 
           <Switch>
             <Match when={activeTab() === "general"}><GeneralTab /></Match>

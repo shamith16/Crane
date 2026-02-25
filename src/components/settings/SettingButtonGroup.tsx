@@ -8,11 +8,11 @@ interface SettingButtonGroupProps {
 
 const SettingButtonGroup: Component<SettingButtonGroupProps> = (props) => {
   return (
-    <div class="flex items-center rounded-md bg-inset p-[2px] gap-[2px]">
+    <div class="flex items-center rounded-full bg-inset p-[2px] gap-[2px]">
       <For each={props.options}>
         {(opt) => (
           <button
-            class={`px-[12px] py-[6px] text-caption font-mono font-medium rounded-[4px] transition-colors cursor-pointer ${
+            class={`px-[12px] py-[6px] text-caption font-mono font-medium rounded-full transition-colors cursor-pointer ${
               props.value === opt.value
                 ? "bg-accent text-inverted"
                 : "text-muted hover:text-primary"

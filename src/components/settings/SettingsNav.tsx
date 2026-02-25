@@ -38,16 +38,16 @@ interface SettingsNavProps {
 
 const SettingsNav: Component<SettingsNavProps> = (props) => {
   return (
-    <nav class="flex flex-col gap-[2px] w-[240px] shrink-0 bg-inset py-[16px] h-full">
+    <nav class="flex flex-col gap-[2px] w-[220px] shrink-0 bg-inset py-[16px] px-[8px] rounded-l-2xl">
       <For each={navItems}>
         {(item) => {
           const isActive = () => props.active === item.id;
           return (
             <button
-              class={`flex items-center gap-[12px] px-[20px] h-[40px] text-[14px] transition-colors cursor-pointer ${
+              class={`flex items-center gap-[12px] px-[12px] h-[38px] text-[14px] rounded-lg transition-colors cursor-pointer ${
                 isActive()
-                  ? "bg-surface text-white font-medium border-l-[3px] border-accent pl-[17px]"
-                  : "text-secondary hover:text-primary hover:bg-surface/50"
+                  ? "bg-accent/15 text-accent font-semibold"
+                  : "text-secondary hover:text-primary hover:bg-hover/50"
               }`}
               onClick={() => props.onSelect(item.id)}
             >

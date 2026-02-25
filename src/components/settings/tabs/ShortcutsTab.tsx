@@ -35,10 +35,10 @@ const ShortcutRow: Component<{ shortcut: Shortcut }> = (props) => {
   return (
     <div class="flex items-center justify-between py-[10px]">
       <span class="text-caption text-secondary">{props.shortcut.label}</span>
-      <div class="flex items-center gap-[4px]">
+      <div class="flex items-baseline gap-0">
         <For each={props.shortcut.keys}>
           {(key) => (
-            <kbd class="inline-flex items-center justify-center min-w-[24px] h-[24px] px-[6px] rounded-[4px] bg-surface border border-border text-mini font-mono font-extrabold text-muted">
+            <kbd class="inline-flex items-center justify-center min-w-[20px] h-[22px] px-[2px] rounded-[4px] bg-surface border border-border text-[14px] font-mono font-extrabold text-muted leading-none">
               {key}
             </kbd>
           )}

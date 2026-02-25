@@ -70,7 +70,7 @@ const DetailPanel: Component = () => {
   };
 
   return (
-    <aside class="w-[320px] shrink-0 bg-surface border-l border-divider overflow-y-auto">
+    <aside class="w-[320px] shrink-0 bg-surface overflow-y-auto rounded-2xl my-[8px] mr-[8px]">
       <div class="flex flex-col gap-[16px] py-[20px] px-[16px]">
         {/* Header */}
         <div class="flex items-center justify-between">

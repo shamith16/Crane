@@ -24,7 +24,7 @@ const StatusBar: Component = () => {
   const downloadCount = () => state.downloads.length;
 
   return (
-    <div class="flex items-center justify-between h-[36px] shrink-0 px-lg bg-inset border-t border-border">
+    <div class="flex items-center justify-between h-[36px] shrink-0 px-lg bg-inset">
       {/* Left: connection status + download count */}
       <div class="flex items-center gap-sm">
         <div class={`w-[6px] h-[6px] rounded-full ${online() ? "bg-success" : "bg-error"}`} />

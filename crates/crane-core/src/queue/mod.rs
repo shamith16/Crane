@@ -1873,9 +1873,12 @@ mod tests {
         // Check chunk files on disk
         let save_path = PathBuf::from(&dl_paused.save_path);
         let temp_dir = {
-            let mut p = save_path.as_os_str().to_os_string();
-            p.push(".crane_tmp");
-            PathBuf::from(p)
+            let parent = save_path.parent().unwrap_or(&save_path);
+            let filename = save_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            parent.join(".crane").join(filename.as_ref())
         };
         let mut chunk_bytes_on_disk: u64 = 0;
         if temp_dir.exists() {
