@@ -7,10 +7,25 @@ use crate::types::{CraneError, FileCategory, UrlAnalysis};
 
 const USER_AGENT: &str = "Crane/0.1.0";
 
+/// Optional headers/cookies to include in the analysis request.
+/// Needed for authenticated downloads (Google Drive, Dropbox, etc.)
+/// where the server requires cookies to return proper Content-Disposition.
+pub struct AnalyzeOptions {
+    pub cookies: Option<String>,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+}
+
 pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
+    analyze_url_with_options(input_url, None).await
+}
+
+pub async fn analyze_url_with_options(
+    input_url: &str,
+    options: Option<&AnalyzeOptions>,
+) -> Result<UrlAnalysis, CraneError> {
     let parsed = url::Url::parse(input_url)?;
     match parsed.scheme() {
-        "http" | "https" => analyze_http(input_url, &parsed).await,
+        "http" | "https" => analyze_http(input_url, &parsed, options).await,
         _ => {
             let handler = crate::protocol::handler_for_url(input_url)?;
             handler.analyze(input_url).await
@@ -18,7 +33,31 @@ pub async fn analyze_url(input_url: &str) -> Result<UrlAnalysis, CraneError> {
     }
 }
 
-async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis, CraneError> {
+/// Apply optional cookies/headers to a request builder.
+fn apply_analyze_options(
+    mut request: reqwest::RequestBuilder,
+    options: Option<&AnalyzeOptions>,
+) -> reqwest::RequestBuilder {
+    if let Some(opts) = options {
+        if let Some(ref cookies) = opts.cookies {
+            if !cookies.is_empty() {
+                request = request.header("Cookie", cookies.as_str());
+            }
+        }
+        if let Some(ref headers) = opts.headers {
+            for (key, value) in headers {
+                request = request.header(key.as_str(), value.as_str());
+            }
+        }
+    }
+    request
+}
+
+async fn analyze_http(
+    input_url: &str,
+    parsed: &url::Url,
+    options: Option<&AnalyzeOptions>,
+) -> Result<UrlAnalysis, CraneError> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
@@ -30,14 +69,15 @@ async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis,
     // Try HEAD first; fall back to a range-limited GET if the server doesn't
     // support HEAD (some CDN/speed-test servers drop HEAD with an empty reply,
     // or return 405/404 for HEAD while supporting GET).
-    let response = match client.head(input_url).send().await {
+    let head_req = apply_analyze_options(client.head(input_url), options);
+    let response = match head_req.send().await {
         Ok(resp) if resp.status().is_success() => resp,
         _ => {
-            client
-                .get(input_url)
-                .header("Range", "bytes=0-0")
-                .send()
-                .await?
+            let get_req = apply_analyze_options(
+                client.get(input_url).header("Range", "bytes=0-0"),
+                options,
+            );
+            get_req.send().await?
         }
     };
     let final_url = response.url().to_string();
@@ -87,12 +127,11 @@ async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis,
     } else {
         // HEAD succeeded but didn't indicate range support — many servers omit
         // Accept-Ranges from HEAD responses. Probe with a Range GET to confirm.
-        match client
-            .get(&final_url)
-            .header("Range", "bytes=0-0")
-            .send()
-            .await
-        {
+        let probe_req = apply_analyze_options(
+            client.get(&final_url).header("Range", "bytes=0-0"),
+            options,
+        );
+        match probe_req.send().await {
             Ok(probe) => probe.status() == reqwest::StatusCode::PARTIAL_CONTENT,
             Err(_) => false,
         }

@@ -10,7 +10,7 @@ use crate::bandwidth::BandwidthLimiter;
 use crate::config::types::SpeedScheduleEntry;
 use crate::db::Database;
 use crate::engine::multi::{start_download, DownloadHandle};
-use crate::metadata::analyzer::analyze_url;
+use crate::metadata::analyzer::{analyze_url, analyze_url_with_options, AnalyzeOptions};
 use crate::metadata::sanitize_filename;
 use crate::types::{CraneError, Download, DownloadOptions, DownloadProgress, DownloadStatus};
 
@@ -480,37 +480,67 @@ impl QueueManager {
             }
 
             if (active.len() as u32) < self.max_concurrent {
-                let save_path = PathBuf::from(&dl.save_path);
-
                 // Downloads inserted by the native host have resumable=false
                 // and connections=1 as placeholders (no HEAD request was done).
                 // Re-analyze to get accurate metadata before starting.
-                let (connections, resumable) = if !dl.resumable && dl.connections == 1 {
-                    match analyze_url(&dl.url).await {
+                // Forward stored cookies/headers so authenticated services
+                // (Google Drive, Dropbox) return proper Content-Disposition.
+                let (connections, resumable, filename) = if !dl.resumable && dl.connections == 1 {
+                    let opts = AnalyzeOptions {
+                        cookies: dl.cookies.clone(),
+                        headers: dl
+                            .headers
+                            .as_deref()
+                            .and_then(|s| serde_json::from_str(s).ok()),
+                    };
+                    match analyze_url_with_options(&dl.url, Some(&opts)).await {
                         Ok(analysis) => {
                             let conns = if analysis.resumable { 8 } else { 1 };
+                            // Use the analyzed filename if the current one is
+                            // generic (e.g. "download" from URL path extraction)
+                            let new_filename =
+                                if dl.filename == "download" && analysis.filename != "download" {
+                                    analysis.filename.clone()
+                                } else {
+                                    dl.filename.clone()
+                                };
+                            let new_save_path = PathBuf::from(
+                                Path::new(&dl.save_path)
+                                    .parent()
+                                    .unwrap_or(Path::new(&dl.save_path)),
+                            )
+                            .join(&new_filename)
+                            .to_string_lossy()
+                            .to_string();
                             // Update the DB row with fresh metadata
                             let _ = self.db.update_download_for_retry(
                                 &dl.id,
-                                &dl.filename,
-                                &dl.save_path,
+                                &new_filename,
+                                &new_save_path,
                                 analysis.total_size,
                                 analysis.mime_type.as_deref(),
-                                dl.category.as_str(),
+                                analysis.category.as_str(),
                                 analysis.resumable,
                                 conns,
                             );
-                            (conns, analysis.resumable)
+                            (conns, analysis.resumable, new_filename)
                         }
-                        Err(_) => (dl.connections, dl.resumable),
+                        Err(_) => (dl.connections, dl.resumable, dl.filename.clone()),
                     }
                 } else {
-                    (dl.connections, dl.resumable)
+                    (dl.connections, dl.resumable, dl.filename.clone())
                 };
                 let _ = resumable; // used via the DB update above
 
+                // Reconstruct save_path — may have changed if filename
+                // was updated from "download" to the real name.
+                let save_path = PathBuf::from(
+                    Path::new(&dl.save_path).parent().unwrap_or(Path::new(&dl.save_path)),
+                )
+                .join(&filename);
+
                 let options = DownloadOptions {
-                    filename: Some(dl.filename.clone()),
+                    filename: Some(filename),
                     connections: Some(connections),
                     referrer: dl.referrer.clone(),
                     cookies: dl.cookies.clone(),

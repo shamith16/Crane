@@ -152,6 +152,16 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
   const authorization = authEntry ? authEntry.value : undefined;
   if (authEntry) authCache.delete(url);
 
+  // Capture cookies for the download URL so the backend can authenticate
+  // HEAD requests (needed for Google Drive, Dropbox, etc.)
+  let cookies = "";
+  try {
+    const cookieList = await chrome.cookies.getAll({ url });
+    cookies = cookieList.map((c) => `${c.name}=${c.value}`).join("; ");
+  } catch (e) {
+    console.warn("[crane] Could not read cookies for URL:", e);
+  }
+
   try {
     const response = await sendToNativeHost({
       type: "download",
@@ -161,6 +171,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
       mimeType: downloadItem.mime || "",
       referrer: downloadItem.referrer || "",
       authorization,
+      cookies,
     });
 
     if (response && response.type === "accepted") {
