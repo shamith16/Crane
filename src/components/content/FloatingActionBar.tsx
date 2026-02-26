@@ -108,7 +108,7 @@ const FloatingActionBar: Component = () => {
   return (
     <Show when={count() > 0}>
       <div
-        class="sticky bottom-[16px] z-10 flex items-center flex-nowrap gap-[12px] rounded-[12px] bg-surface border border-accent px-[16px] py-[8px] w-fit mx-auto"
+        class="absolute bottom-[16px] left-1/2 -translate-x-1/2 z-10 flex items-center flex-nowrap gap-[12px] rounded-[12px] bg-surface border border-accent px-[16px] py-[8px] w-fit"
         style={{ "box-shadow": "0 4px 20px color-mix(in srgb, var(--color-accent) 12%, transparent)" }}
       >
         <span class="text-[12px] font-mono font-extrabold text-accent whitespace-nowrap">

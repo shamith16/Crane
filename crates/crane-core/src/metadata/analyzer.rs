@@ -53,6 +53,13 @@ async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis,
     let headers = response.headers();
     let used_range_get = status == reqwest::StatusCode::PARTIAL_CONTENT;
 
+    // Check if HEAD already tells us about range support
+    let head_says_resumable = headers
+        .get("accept-ranges")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("bytes"))
+        .unwrap_or(false);
+
     // For 206 responses, extract the total size from Content-Range header
     // (Content-Range: bytes 0-0/TOTAL), since Content-Length is just the range size.
     let total_size = if used_range_get {
@@ -73,13 +80,23 @@ async fn analyze_http(input_url: &str, parsed: &url::Url) -> Result<UrlAnalysis,
         .and_then(|v| v.to_str().ok())
         .map(|v| v.split(';').next().unwrap_or(v).trim().to_string());
 
-    // If we got a 206, the server supports ranges even without Accept-Ranges header.
-    let resumable = used_range_get
-        || headers
-            .get("accept-ranges")
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v.contains("bytes"))
-            .unwrap_or(false);
+    // Determine resumability: 206 from Range GET, Accept-Ranges header, or
+    // probe with a Range GET if HEAD didn't confirm either way.
+    let resumable = if used_range_get || head_says_resumable {
+        true
+    } else {
+        // HEAD succeeded but didn't indicate range support — many servers omit
+        // Accept-Ranges from HEAD responses. Probe with a Range GET to confirm.
+        match client
+            .get(&final_url)
+            .header("Range", "bytes=0-0")
+            .send()
+            .await
+        {
+            Ok(probe) => probe.status() == reqwest::StatusCode::PARTIAL_CONTENT,
+            Err(_) => false,
+        }
+    };
 
     let server = headers
         .get("server")

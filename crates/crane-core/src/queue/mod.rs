@@ -481,9 +481,37 @@ impl QueueManager {
 
             if (active.len() as u32) < self.max_concurrent {
                 let save_path = PathBuf::from(&dl.save_path);
+
+                // Downloads inserted by the native host have resumable=false
+                // and connections=1 as placeholders (no HEAD request was done).
+                // Re-analyze to get accurate metadata before starting.
+                let (connections, resumable) = if !dl.resumable && dl.connections == 1 {
+                    match analyze_url(&dl.url).await {
+                        Ok(analysis) => {
+                            let conns = if analysis.resumable { 8 } else { 1 };
+                            // Update the DB row with fresh metadata
+                            let _ = self.db.update_download_for_retry(
+                                &dl.id,
+                                &dl.filename,
+                                &dl.save_path,
+                                analysis.total_size,
+                                analysis.mime_type.as_deref(),
+                                dl.category.as_str(),
+                                analysis.resumable,
+                                conns,
+                            );
+                            (conns, analysis.resumable)
+                        }
+                        Err(_) => (dl.connections, dl.resumable),
+                    }
+                } else {
+                    (dl.connections, dl.resumable)
+                };
+                let _ = resumable; // used via the DB update above
+
                 let options = DownloadOptions {
                     filename: Some(dl.filename.clone()),
-                    connections: Some(dl.connections),
+                    connections: Some(connections),
                     referrer: dl.referrer.clone(),
                     cookies: dl.cookies.clone(),
                     user_agent: dl.user_agent.clone(),
