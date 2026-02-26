@@ -71,6 +71,7 @@ const TopBar: Component = () => {
 
           <input
             type="text"
+            data-url-input
             placeholder="Paste URL to start download..."
             class="flex-1 bg-transparent text-body font-mono text-primary placeholder:text-muted outline-none"
             value={url()}

@@ -64,6 +64,10 @@ interface DownloadStore {
   getProgress: (id: string) => DownloadProgress | undefined;
   /** Force immediate refresh of downloads from backend */
   refreshDownloads: () => void;
+  /** Select all downloads in current filtered view */
+  selectAll: () => void;
+  /** Flat ordered ID array matching visual display order (for arrow key nav) */
+  flatDisplayIds: () => string[];
 }
 
 // ── Status display order ───────────────────────
@@ -323,6 +327,14 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     if (isTauri()) fetchDownloads();
   };
 
+  const selectAll = () => {
+    const ids = new Set(filteredDownloads().map((d) => d.id));
+    setSelectedIds(ids);
+  };
+
+  const flatDisplayIds = (): string[] =>
+    downloadsByStatus().flatMap((group) => group.items.map((d) => d.id));
+
   const store: DownloadStore = {
     state,
     activeFilter,
@@ -343,6 +355,8 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
     selectedDownloads,
     getProgress,
     refreshDownloads,
+    selectAll,
+    flatDisplayIds,
   };
 
   return (
