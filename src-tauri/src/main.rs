@@ -65,6 +65,11 @@ fn main() {
                 speed_schedule,
             ));
 
+            // Recover downloads interrupted by crash/force-close
+            if let Err(e) = queue.recover_interrupted() {
+                eprintln!("[startup] Recovery error: {e}");
+            }
+
             // Auto-resume paused downloads if configured
             if auto_resume {
                 let resume_queue = queue.clone();

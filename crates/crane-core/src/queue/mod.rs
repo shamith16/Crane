@@ -49,6 +49,29 @@ impl QueueManager {
         self
     }
 
+    /// Reset downloads that were interrupted by a crash or force-close.
+    /// Any rows left in `downloading` or `analyzing` status have no active
+    /// tokio task — reset them to `pending` so `check_pending()` picks them up.
+    pub fn recover_interrupted(&self) -> Result<u32, CraneError> {
+        let mut count = 0u32;
+        for status in [DownloadStatus::Downloading, DownloadStatus::Analyzing] {
+            let orphans = self.db.get_downloads_by_status(status)?;
+            for dl in &orphans {
+                self.db.update_download_status(
+                    &dl.id,
+                    DownloadStatus::Pending,
+                    None,
+                    None,
+                )?;
+                count += 1;
+            }
+        }
+        if count > 0 {
+            eprintln!("[queue] recovered {count} interrupted download(s)");
+        }
+        Ok(count)
+    }
+
     /// Accessor for the underlying database.
     pub fn db(&self) -> &Database {
         &self.db
