@@ -1,9 +1,12 @@
 import { createSignal, type Component } from "solid-js";
 import { FileText, FolderOpen, Download, Upload, RotateCcw } from "lucide-solid";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   isTauri,
   getConfigPath,
   openConfigFile,
+  exportSettings,
+  importSettings,
   resetSettings,
 } from "../../../lib/tauri";
 import { useSettings } from "../../../stores/settings";
@@ -37,6 +40,36 @@ const AdvancedTab: Component = () => {
     }
   };
 
+  const handleExport = async () => {
+    if (!isTauri()) return;
+    const path = await save({
+      title: "Export Settings",
+      defaultPath: "crane-settings.toml",
+      filters: [{ name: "TOML", extensions: ["toml"] }],
+    });
+    if (!path) return;
+    try {
+      await exportSettings(path);
+    } catch (e) {
+      console.error("[crane] failed to export settings:", e);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!isTauri()) return;
+    const path = await open({
+      title: "Import Settings",
+      filters: [{ name: "TOML", extensions: ["toml"] }],
+    });
+    if (!path) return;
+    try {
+      await importSettings(path);
+      await reload();
+    } catch (e) {
+      console.error("[crane] failed to import settings:", e);
+    }
+  };
+
   const handleReset = async () => {
     if (!isTauri()) return;
     try {
@@ -65,12 +98,14 @@ const AdvancedTab: Component = () => {
         <div class="flex flex-wrap gap-[8px] py-[12px]">
           <button
             class="flex items-center gap-[6px] bg-surface border border-border rounded-md px-[12px] py-[8px] text-caption font-mono text-secondary hover:border-accent/50 transition-colors cursor-pointer"
+            onClick={handleExport}
           >
             <Download size={14} />
             <span>Export Settings</span>
           </button>
           <button
             class="flex items-center gap-[6px] bg-surface border border-border rounded-md px-[12px] py-[8px] text-caption font-mono text-secondary hover:border-accent/50 transition-colors cursor-pointer"
+            onClick={handleImport}
           >
             <Upload size={14} />
             <span>Import Settings</span>

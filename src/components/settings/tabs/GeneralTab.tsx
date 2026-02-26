@@ -1,5 +1,7 @@
 import type { Component } from "solid-js";
 import { FolderOpen } from "lucide-solid";
+import { open } from "@tauri-apps/plugin-dialog";
+import { isTauri } from "../../../lib/tauri";
 import { useSettings } from "../../../stores/settings";
 import SettingSection from "../SettingSection";
 import SettingRow from "../SettingRow";
@@ -9,16 +11,25 @@ import SettingSelect from "../SettingSelect";
 const GeneralTab: Component = () => {
   const { config, update } = useSettings();
 
+  const handlePickFolder = async () => {
+    if (!isTauri()) return;
+    const selected = await open({
+      directory: true,
+      defaultPath: config.general.download_location || undefined,
+      title: "Choose Download Location",
+    });
+    if (selected) {
+      update("general.download_location", selected);
+    }
+  };
+
   return (
     <div class="flex flex-col gap-[24px]">
       <SettingSection title="Storage">
         <SettingRow label="Download Location" description="Default folder for saved files">
           <button
             class="flex items-center gap-[8px] bg-surface border border-border rounded-md px-[12px] py-[6px] text-caption font-mono text-secondary hover:border-accent/50 transition-colors cursor-pointer max-w-[280px]"
-            onClick={() => {
-              // In Tauri, would open folder picker dialog
-              console.log("[crane] open folder picker");
-            }}
+            onClick={handlePickFolder}
           >
             <span class="truncate">{config.general.download_location}</span>
             <FolderOpen size={14} class="text-muted shrink-0" />
