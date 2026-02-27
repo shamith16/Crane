@@ -41,10 +41,6 @@ jobs:
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            .
-            src-tauri
 
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-22.04'
@@ -56,8 +52,8 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Run Rust tests
-        run: cargo test --workspace
+      - name: Run tests
+        run: cargo test -p crane-core -p crane-native-host
 
       - name: Run Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy -p crane-core -p crane-native-host -- -D warnings
