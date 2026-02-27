@@ -63,10 +63,8 @@ impl Database {
             .map_err(|e| CraneError::Database(e.to_string()))?;
 
         // Create version tracking table
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);",
-        )
-        .map_err(|e| CraneError::Database(e.to_string()))?;
+        conn.execute_batch("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);")
+            .map_err(|e| CraneError::Database(e.to_string()))?;
 
         run_migrations(&conn)?;
         Ok(())
@@ -74,11 +72,9 @@ impl Database {
 }
 
 fn get_schema_version(conn: &Connection) -> Result<i64, CraneError> {
-    match conn.query_row(
-        "SELECT version FROM schema_version LIMIT 1",
-        [],
-        |row| row.get::<_, i64>(0),
-    ) {
+    match conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+        row.get::<_, i64>(0)
+    }) {
         Ok(v) => Ok(v),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
         Err(e) => Err(CraneError::Database(e.to_string())),
@@ -88,18 +84,19 @@ fn get_schema_version(conn: &Connection) -> Result<i64, CraneError> {
 fn set_schema_version(conn: &Connection, version: i64) -> Result<(), CraneError> {
     conn.execute("DELETE FROM schema_version", [])
         .map_err(|e| CraneError::Database(e.to_string()))?;
-    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [version])
-        .map_err(|e| CraneError::Database(e.to_string()))?;
+    conn.execute(
+        "INSERT INTO schema_version (version) VALUES (?1)",
+        [version],
+    )
+    .map_err(|e| CraneError::Database(e.to_string()))?;
     Ok(())
 }
 
 fn run_migrations(conn: &Connection) -> Result<(), CraneError> {
     let current = get_schema_version(conn)?;
 
-    let migrations: &[fn(&Connection) -> Result<(), CraneError>] = &[
-        migrate_v0_to_v1,
-        migrate_v1_to_v2,
-    ];
+    let migrations: &[fn(&Connection) -> Result<(), CraneError>] =
+        &[migrate_v0_to_v1, migrate_v1_to_v2];
 
     for (i, migrate) in migrations.iter().enumerate() {
         let target = (i + 1) as i64;
@@ -382,8 +379,9 @@ mod tests {
                     category TEXT,
                     user_agent TEXT,
                     created_at TEXT NOT NULL
-                );"
-            ).unwrap();
+                );",
+            )
+            .unwrap();
         }
 
         // Now open with Database::open — should detect missing version, run all migrations

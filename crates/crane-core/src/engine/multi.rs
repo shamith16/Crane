@@ -907,10 +907,7 @@ struct ChunkPlan {
 /// Uses a hidden `.crane/` folder in the parent directory to keep temp files out of sight.
 fn temp_dir_path(save_path: &Path) -> PathBuf {
     let parent = save_path.parent().unwrap_or(save_path);
-    let filename = save_path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let filename = save_path.file_name().unwrap_or_default().to_string_lossy();
     parent.join(".crane").join(filename.as_ref())
 }
 
@@ -1113,7 +1110,15 @@ where
             let on_progress_arc: Arc<dyn Fn(&DownloadProgress) + Send + Sync> =
                 Arc::new(on_progress);
             return handler
-                .download(url, save_path, options, 0, cancel_token, on_progress_arc, limiter)
+                .download(
+                    url,
+                    save_path,
+                    options,
+                    0,
+                    cancel_token,
+                    on_progress_arc,
+                    limiter,
+                )
                 .await;
         }
     }

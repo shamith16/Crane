@@ -4,11 +4,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 
+use crate::bandwidth::BandwidthLimiter;
 use crate::metadata::mime::categorize_extension;
 use crate::metadata::sanitize_filename;
 use crate::network::is_public_host;
 use crate::types::{CraneError, DownloadOptions, DownloadProgress, DownloadResult, UrlAnalysis};
-use crate::bandwidth::BandwidthLimiter;
 
 use super::ProtocolHandler;
 

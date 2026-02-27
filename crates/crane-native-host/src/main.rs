@@ -697,7 +697,10 @@ mod tests {
         let dl = db.get_download(download_id).unwrap();
         let headers: std::collections::HashMap<String, String> =
             serde_json::from_str(dl.headers.as_ref().unwrap()).unwrap();
-        assert_eq!(headers.get("Authorization").unwrap(), "Bearer my-secret-token");
+        assert_eq!(
+            headers.get("Authorization").unwrap(),
+            "Bearer my-secret-token"
+        );
     }
 
     #[test]
@@ -732,7 +735,8 @@ mod tests {
         let r1 = handle_message(&msg, &db, "/downloads");
         let id1 = r1["downloadId"].as_str().unwrap().to_string();
 
-        db.update_download_status(&id1, DownloadStatus::Completed, None, None).unwrap();
+        db.update_download_status(&id1, DownloadStatus::Completed, None, None)
+            .unwrap();
 
         let r2 = handle_message(&msg, &db, "/downloads");
         assert_eq!(r2["type"], "accepted");

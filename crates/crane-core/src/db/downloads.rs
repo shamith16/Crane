@@ -915,7 +915,10 @@ mod tests {
         assert_eq!(found.unwrap().id, "fail-1"); // still returns the failed one
 
         // Different URL should not match
-        assert!(db.find_failed_download("https://other.com/file").unwrap().is_none());
+        assert!(db
+            .find_failed_download("https://other.com/file")
+            .unwrap()
+            .is_none());
     }
 
     #[test]

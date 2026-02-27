@@ -77,7 +77,10 @@ fn main() {
                     match resume_queue.resume_all().await {
                         Ok(resumed) => {
                             if !resumed.is_empty() {
-                                eprintln!("[startup] Auto-resumed {} paused downloads", resumed.len());
+                                eprintln!(
+                                    "[startup] Auto-resumed {} paused downloads",
+                                    resumed.len()
+                                );
                             }
                         }
                         Err(e) => eprintln!("[startup] Auto-resume error: {e}"),

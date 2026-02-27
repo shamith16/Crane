@@ -73,10 +73,8 @@ async fn analyze_http(
     let response = match head_req.send().await {
         Ok(resp) if resp.status().is_success() => resp,
         _ => {
-            let get_req = apply_analyze_options(
-                client.get(input_url).header("Range", "bytes=0-0"),
-                options,
-            );
+            let get_req =
+                apply_analyze_options(client.get(input_url).header("Range", "bytes=0-0"), options);
             get_req.send().await?
         }
     };
@@ -127,10 +125,8 @@ async fn analyze_http(
     } else {
         // HEAD succeeded but didn't indicate range support — many servers omit
         // Accept-Ranges from HEAD responses. Probe with a Range GET to confirm.
-        let probe_req = apply_analyze_options(
-            client.get(&final_url).header("Range", "bytes=0-0"),
-            options,
-        );
+        let probe_req =
+            apply_analyze_options(client.get(&final_url).header("Range", "bytes=0-0"), options);
         match probe_req.send().await {
             Ok(probe) => probe.status() == reqwest::StatusCode::PARTIAL_CONTENT,
             Err(_) => false,

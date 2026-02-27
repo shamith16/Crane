@@ -136,7 +136,10 @@ mod tests {
         limiter.acquire(500_000).await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed >= Duration::from_millis(800), "took only {elapsed:?}");
+        assert!(
+            elapsed >= Duration::from_millis(800),
+            "took only {elapsed:?}"
+        );
         assert!(
             elapsed <= Duration::from_millis(1500),
             "took too long: {elapsed:?}"
@@ -180,7 +183,10 @@ mod tests {
             h.await.unwrap();
         }
         let elapsed = start.elapsed();
-        assert!(elapsed >= Duration::from_millis(800), "too fast: {elapsed:?}");
+        assert!(
+            elapsed >= Duration::from_millis(800),
+            "too fast: {elapsed:?}"
+        );
         assert!(
             elapsed <= Duration::from_millis(1500),
             "too slow: {elapsed:?}"

@@ -57,12 +57,8 @@ impl QueueManager {
         for status in [DownloadStatus::Downloading, DownloadStatus::Analyzing] {
             let orphans = self.db.get_downloads_by_status(status)?;
             for dl in &orphans {
-                self.db.update_download_status(
-                    &dl.id,
-                    DownloadStatus::Pending,
-                    None,
-                    None,
-                )?;
+                self.db
+                    .update_download_status(&dl.id, DownloadStatus::Pending, None, None)?;
                 count += 1;
             }
         }
@@ -276,7 +272,10 @@ impl QueueManager {
                 referrer: dl.referrer.clone(),
                 cookies: dl.cookies.clone(),
                 user_agent: dl.user_agent.clone(),
-                headers: dl.headers.as_deref().and_then(|s| serde_json::from_str(s).ok()),
+                headers: dl
+                    .headers
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok()),
                 ..Default::default()
             };
             self.start_download_internal(id, &save_path, &options, &mut active)
@@ -373,7 +372,10 @@ impl QueueManager {
                 referrer: next.referrer.clone(),
                 cookies: next.cookies.clone(),
                 user_agent: next.user_agent.clone(),
-                headers: next.headers.as_deref().and_then(|s| serde_json::from_str(s).ok()),
+                headers: next
+                    .headers
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok()),
                 ..Default::default()
             };
             self.start_download_internal(&next.id, &save_path, &options, active)
@@ -535,7 +537,9 @@ impl QueueManager {
                 // Reconstruct save_path — may have changed if filename
                 // was updated from "download" to the real name.
                 let save_path = PathBuf::from(
-                    Path::new(&dl.save_path).parent().unwrap_or(Path::new(&dl.save_path)),
+                    Path::new(&dl.save_path)
+                        .parent()
+                        .unwrap_or(Path::new(&dl.save_path)),
                 )
                 .join(&filename);
 
@@ -545,7 +549,10 @@ impl QueueManager {
                     referrer: dl.referrer.clone(),
                     cookies: dl.cookies.clone(),
                     user_agent: dl.user_agent.clone(),
-                    headers: dl.headers.as_deref().and_then(|s| serde_json::from_str(s).ok()),
+                    headers: dl
+                        .headers
+                        .as_deref()
+                        .and_then(|s| serde_json::from_str(s).ok()),
                     ..Default::default()
                 };
                 match self
@@ -609,9 +616,14 @@ impl QueueManager {
             }
         };
 
-        let handle =
-            start_download(&url, save_path, options, on_progress, Some(self.limiter.clone()))
-                .await?;
+        let handle = start_download(
+            &url,
+            save_path,
+            options,
+            on_progress,
+            Some(self.limiter.clone()),
+        )
+        .await?;
 
         self.db
             .update_download_status(id, DownloadStatus::Downloading, None, None)?;
@@ -1975,10 +1987,14 @@ mod tests {
 
         let url = "https://testfile.packersmoves.com/10GB.zip";
         let id = qm
-            .add_download(url, tmp.path().to_str().unwrap(), DownloadOptions {
-                connections: Some(8),
-                ..Default::default()
-            })
+            .add_download(
+                url,
+                tmp.path().to_str().unwrap(),
+                DownloadOptions {
+                    connections: Some(8),
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
 
@@ -2013,10 +2029,7 @@ mod tests {
         let save_path = PathBuf::from(&dl_paused.save_path);
         let temp_dir = {
             let parent = save_path.parent().unwrap_or(&save_path);
-            let filename = save_path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy();
+            let filename = save_path.file_name().unwrap_or_default().to_string_lossy();
             parent.join(".crane").join(filename.as_ref())
         };
         let mut chunk_bytes_on_disk: u64 = 0;
@@ -2026,7 +2039,11 @@ mod tests {
                 let meta = entry.metadata().await.unwrap();
                 let name = entry.file_name();
                 println!("[test]   chunk {:?}: {} bytes", name, meta.len());
-                if name.to_str().map(|s| s.starts_with("chunk_")).unwrap_or(false) {
+                if name
+                    .to_str()
+                    .map(|s| s.starts_with("chunk_"))
+                    .unwrap_or(false)
+                {
                     chunk_bytes_on_disk += meta.len();
                 }
             }
