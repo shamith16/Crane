@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crane_core::db::Database;
 use crane_core::queue::QueueManager;
 use state::AppState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 fn main() {
     tauri::Builder::default()
@@ -97,7 +97,11 @@ fn main() {
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
                 loop {
                     interval.tick().await;
+                    let mut changed = false;
                     if let Ok(finished) = monitor_queue.check_completed().await {
+                        if !finished.is_empty() {
+                            changed = true;
+                        }
                         notifications::notify_finished(
                             &app_handle,
                             monitor_queue.db(),
@@ -106,8 +110,16 @@ fn main() {
                         )
                         .await;
                     }
-                    if let Err(e) = monitor_queue.check_pending(&monitor_save_dir).await {
-                        eprintln!("check_pending error: {e}");
+                    match monitor_queue.check_pending(&monitor_save_dir).await {
+                        Ok(started) => {
+                            if !started.is_empty() {
+                                changed = true;
+                            }
+                        }
+                        Err(e) => eprintln!("check_pending error: {e}"),
+                    }
+                    if changed {
+                        let _ = app_handle.emit("downloads-changed", ());
                     }
                 }
             });

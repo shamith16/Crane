@@ -1,5 +1,5 @@
-import { Show, type Component } from "solid-js";
-import { X } from "lucide-solid";
+import { Show, createSignal, type Component } from "solid-js";
+import { X, Copy, Check } from "lucide-solid";
 import { useLayout } from "./LayoutContext";
 import { useDownloads } from "../../stores/downloads";
 import ConnectionSegments from "../detail/ConnectionSegments";
@@ -98,9 +98,33 @@ const DetailPanel: Component = () => {
                 <p class="text-heading-sm font-extrabold text-primary break-all leading-snug">
                   {download().filename}
                 </p>
-                <p class="text-caption font-mono text-muted truncate">
-                  {download().source_domain ?? download().url}
-                </p>
+                {(() => {
+                  const [copied, setCopied] = createSignal(false);
+                  const handleCopy = async () => {
+                    await navigator.clipboard.writeText(download().url);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  };
+                  return (
+                    <div class="flex items-center gap-[6px] group">
+                      <p
+                        class="text-caption font-mono text-muted truncate min-w-0 flex-1 select-all"
+                        title={download().url}
+                      >
+                        {download().url}
+                      </p>
+                      <button
+                        class="shrink-0 w-[24px] h-[24px] flex items-center justify-center rounded text-muted hover:text-accent hover:bg-hover transition-colors cursor-pointer"
+                        onClick={handleCopy}
+                        title="Copy URL"
+                      >
+                        <Show when={copied()} fallback={<Copy size={13} />}>
+                          <Check size={13} class="text-accent" />
+                        </Show>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Progress section — only for active/paused/queued */}

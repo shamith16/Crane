@@ -198,7 +198,27 @@ fn extract_filename_from_headers(headers: &reqwest::header::HeaderMap) -> Option
     None
 }
 
+/// Query parameters commonly used to pass filenames in download URLs.
+/// `_fn` is used by APKPure (base64-encoded), others are used by various CDNs.
+const FILENAME_QUERY_PARAMS: &[&str] = &["filename", "file", "name", "_fn", "fn", "dl"];
+
+/// Extract a filename from a URL string, checking query parameters (with
+/// base64 decoding) before falling back to the path segment.
+/// Public so the native messaging host can reuse this logic.
+pub fn extract_filename_from_url_str(url_str: &str) -> String {
+    match url::Url::parse(url_str) {
+        Ok(parsed) => extract_filename_from_url(&parsed),
+        Err(_) => "download".to_string(),
+    }
+}
+
 fn extract_filename_from_url(parsed: &url::Url) -> String {
+    // 1. Check query parameters for filename hints (covers APKPure _fn, etc.)
+    if let Some(name) = extract_filename_from_query_params(parsed) {
+        return name;
+    }
+
+    // 2. Fall back to URL path segment
     let path = parsed.path();
     let segment = path.rsplit('/').next().unwrap_or("");
 
@@ -207,8 +227,11 @@ fn extract_filename_from_url(parsed: &url::Url) -> String {
             let name = decoded.into_owned();
             if name.is_empty() {
                 "download".to_string()
-            } else {
+            } else if has_file_extension(&name) {
                 name
+            } else {
+                // Path segment has no recognizable extension — might be base64-encoded
+                try_base64_decode_filename(&name).unwrap_or(name)
             }
         }
         Err(_) => {
@@ -218,6 +241,51 @@ fn extract_filename_from_url(parsed: &url::Url) -> String {
                 segment.to_string()
             }
         }
+    }
+}
+
+fn extract_filename_from_query_params(parsed: &url::Url) -> Option<String> {
+    for (key, value) in parsed.query_pairs() {
+        let key_lower = key.to_ascii_lowercase();
+        if FILENAME_QUERY_PARAMS.contains(&key_lower.as_str()) && !value.is_empty() {
+            // Try the value directly — some sites pass plain filenames
+            if has_file_extension(&value) {
+                return Some(value.into_owned());
+            }
+            // Try base64 decoding (APKPure encodes _fn as base64)
+            if let Some(decoded) = try_base64_decode_filename(&value) {
+                if has_file_extension(&decoded) {
+                    return Some(decoded);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn has_file_extension(name: &str) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| !e.is_empty() && e.len() <= 10)
+        .unwrap_or(false)
+}
+
+fn try_base64_decode_filename(value: &str) -> Option<String> {
+    use base64::Engine;
+    // Try standard base64 variants — CDNs use different padding/alphabet conventions
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(value)
+        .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(value))
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(value))
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(value))
+        .ok()?;
+
+    let text = String::from_utf8(decoded).ok()?;
+    if text.len() < 256 {
+        Some(text)
+    } else {
+        None
     }
 }
 
@@ -531,5 +599,50 @@ mod tests {
         assert_eq!(result.filename, "10GB.bin");
         assert_eq!(result.total_size, Some(10737418240));
         assert!(result.resumable);
+    }
+
+    #[test]
+    fn test_extract_filename_from_query_param_plain() {
+        let url = url::Url::parse("https://example.com/dl?filename=report.pdf&token=abc").unwrap();
+        assert_eq!(extract_filename_from_url(&url), "report.pdf");
+    }
+
+    #[test]
+    fn test_extract_filename_from_query_param_base64() {
+        // _fn=base64("Yamaha Motorcycle Connect_3.7.0_APKPure.xapk")
+        let url = url::Url::parse(
+            "https://d-31.winudf.com/b/XAPK/blob123?_fn=WWFtYWhhIE1vdG9yY3ljbGUgQ29ubmVjdF8zLjcuMF9BUEtQdXJlLnhhcGs&_p=pkg"
+        ).unwrap();
+        assert_eq!(
+            extract_filename_from_url(&url),
+            "Yamaha Motorcycle Connect_3.7.0_APKPure.xapk"
+        );
+    }
+
+    #[test]
+    fn test_extract_filename_prefers_query_over_path() {
+        let url = url::Url::parse("https://cdn.example.com/abc123?filename=setup.exe").unwrap();
+        assert_eq!(extract_filename_from_url(&url), "setup.exe");
+    }
+
+    #[test]
+    fn test_extract_filename_falls_back_to_path() {
+        let url = url::Url::parse("https://example.com/files/app.dmg?token=xyz").unwrap();
+        assert_eq!(extract_filename_from_url(&url), "app.dmg");
+    }
+
+    #[test]
+    fn test_extract_filename_ignores_non_filename_params() {
+        let url =
+            url::Url::parse("https://example.com/installer.pkg?ref=homepage&id=42").unwrap();
+        assert_eq!(extract_filename_from_url(&url), "installer.pkg");
+    }
+
+    #[test]
+    fn test_has_file_extension() {
+        assert!(has_file_extension("file.pdf"));
+        assert!(has_file_extension("file.xapk"));
+        assert!(!has_file_extension("noextension"));
+        assert!(!has_file_extension(""));
     }
 }

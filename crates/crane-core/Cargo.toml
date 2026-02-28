@@ -1,6 +1,6 @@
 [package]
 name = "crane-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -27,6 +27,7 @@ async-trait = "0.1"
 futures-rustls = "0.26"
 rustls = "0.23"
 webpki-roots = "1"
+base64 = "0.22"
 
 [dev-dependencies]
 wiremock = "0.6"

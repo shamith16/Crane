@@ -98,14 +98,67 @@ function showNotification(title, message) {
 }
 
 /**
- * Extract a filename from a URL path, falling back to "download" if empty.
+ * Query parameters commonly used to pass filenames in download URLs.
+ * _fn is used by APKPure (base64-encoded), others by various CDNs.
+ */
+const FILENAME_QUERY_PARAMS = ["filename", "file", "name", "_fn", "fn", "dl"];
+
+/**
+ * Check if a string looks like a filename (has a file extension).
+ */
+function hasFileExtension(name) {
+  const dot = name.lastIndexOf(".");
+  if (dot < 1) return false;
+  const ext = name.slice(dot + 1);
+  return ext.length > 0 && ext.length <= 10;
+}
+
+/**
+ * Try to base64-decode a string into a filename.
+ */
+function tryBase64Decode(value) {
+  try {
+    const decoded = atob(value);
+    // Check it's valid text and reasonable length
+    if (decoded.length > 0 && decoded.length < 256) {
+      // Verify all characters are printable
+      if (/^[\x20-\x7E\u00A0-\uFFFF]+$/.test(decoded)) {
+        return decoded;
+      }
+    }
+  } catch {
+    // Not valid base64
+  }
+  return null;
+}
+
+/**
+ * Extract a filename from a URL, checking query parameters (with base64
+ * decoding) before falling back to the path segment.
  */
 function filenameFromUrl(url) {
   try {
-    const pathname = new URL(url).pathname;
-    const segments = pathname.split("/").filter(Boolean);
+    const parsed = new URL(url);
+
+    // 1. Check query params for filename hints
+    for (const param of FILENAME_QUERY_PARAMS) {
+      const value = parsed.searchParams.get(param);
+      if (!value) continue;
+      if (hasFileExtension(value)) return value;
+      // Try base64 decode (APKPure _fn param)
+      const decoded = tryBase64Decode(value);
+      if (decoded && hasFileExtension(decoded)) return decoded;
+    }
+
+    // 2. Fall back to URL path segment
+    const segments = parsed.pathname.split("/").filter(Boolean);
     if (segments.length > 0) {
-      return decodeURIComponent(segments[segments.length - 1]);
+      const segment = decodeURIComponent(segments[segments.length - 1]);
+      if (hasFileExtension(segment)) return segment;
+      // Path has no extension — try base64 decode
+      const decoded = tryBase64Decode(segment);
+      if (decoded && hasFileExtension(decoded)) return decoded;
+      return segment;
     }
   } catch (e) {
     console.warn("[crane] Malformed URL, using default filename:", e);

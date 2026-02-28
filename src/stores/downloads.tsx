@@ -1,4 +1,4 @@
-import { createContext, createSignal, useContext, type ParentComponent } from "solid-js";
+import { createContext, createSignal, onCleanup, useContext, type ParentComponent } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { isTauri, getDownloads, subscribeProgress } from "../lib/tauri";
 import { mockDownloads } from "../data/mockDownloads";
@@ -166,7 +166,15 @@ export const DownloadStoreProvider: ParentComponent = (props) => {
 
   if (isTauri()) {
     fetchDownloads();
-    // Periodic refresh to catch new downloads (from extension) and status changes
+    // Listen for push notifications from the backend when downloads change
+    // (new download added, status changed, etc.) — near-instant UI updates
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      const unlisten = listen("downloads-changed", () => {
+        fetchDownloads();
+      });
+      onCleanup(() => { unlisten.then((fn) => fn()); });
+    });
+    // Fallback periodic refresh in case events are missed
     setInterval(fetchDownloads, 5000);
   } else {
     // Browser dev mode — use mock data

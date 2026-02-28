@@ -1,10 +1,19 @@
 use crane_core::db::Database;
+use crane_core::metadata::analyzer::extract_filename_from_url_str;
 use crane_core::metadata::sanitize_filename;
 use crane_core::types::{Download, DownloadStatus, FileCategory};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 
 const MAX_MESSAGE_SIZE: u32 = 1_048_576; // 1 MB
+
+fn has_file_extension(name: &str) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| !e.is_empty() && e.len() <= 10)
+        .unwrap_or(false)
+}
 
 /// Read a native messaging message from the given reader.
 ///
@@ -186,20 +195,19 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
 
     let source_domain = parsed_url.host_str().map(|h| h.to_string());
 
-    // Use provided filename or derive from URL path, then sanitize
-    // to prevent path traversal attacks (e.g., "../../.ssh/authorized_keys").
-    let raw_filename = msg
+    // Use provided filename if it looks like a real file (has extension),
+    // otherwise derive from URL query params / path with base64 decoding.
+    // Always sanitize to prevent path traversal attacks.
+    let extension_filename = msg
         .get("filename")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            parsed_url
-                .path_segments()
-                .and_then(|mut segs| segs.next_back())
-                .filter(|s| !s.is_empty())
-                .unwrap_or("download")
-                .to_string()
-        });
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let raw_filename = match extension_filename {
+        Some(name) if has_file_extension(&name) => name,
+        _ => extract_filename_from_url_str(url_str),
+    };
     let filename = sanitize_filename(&raw_filename);
 
     let file_size = msg.get("fileSize").and_then(|v| v.as_u64());

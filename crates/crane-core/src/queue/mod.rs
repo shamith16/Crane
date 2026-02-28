@@ -500,8 +500,18 @@ impl QueueManager {
                             let conns = if analysis.resumable { 8 } else { 1 };
                             // Use the analyzed filename if the current one is
                             // generic (e.g. "download" from URL path extraction)
+                            // Prefer the analyzed filename when:
+                            // - current name is generic "download", or
+                            // - current name lacks a file extension (e.g. base64 blob from CDN URL)
+                            let current_has_ext = std::path::Path::new(&dl.filename)
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .map(|e| !e.is_empty() && e.len() <= 10)
+                                .unwrap_or(false);
                             let new_filename =
-                                if dl.filename == "download" && analysis.filename != "download" {
+                                if (!current_has_ext || dl.filename == "download")
+                                    && analysis.filename != "download"
+                                {
                                     analysis.filename.clone()
                                 } else {
                                     dl.filename.clone()

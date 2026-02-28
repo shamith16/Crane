@@ -39,6 +39,7 @@ pub fn categorize_mime(mime: &str) -> FileCategory {
         "application/x-rpm" => FileCategory::Software,
         "application/x-msi" => FileCategory::Software,
         "application/x-iso9660-image" => FileCategory::Software,
+        "application/vnd.android.package-archive" => FileCategory::Software,
 
         _ => FileCategory::Other,
     }
@@ -65,7 +66,7 @@ pub fn categorize_extension(filename: &str) -> FileCategory {
         | "tgz" => FileCategory::Archives,
 
         "exe" | "msi" | "dmg" | "pkg" | "deb" | "rpm" | "appimage" | "snap" | "flatpak" | "iso"
-        | "img" => FileCategory::Software,
+        | "img" | "apk" | "xapk" | "ipa" => FileCategory::Software,
 
         _ => FileCategory::Other,
     }
@@ -213,6 +214,29 @@ mod tests {
         assert_eq!(
             categorize_extension("archive.tar.gz"),
             FileCategory::Archives,
+        );
+    }
+
+    #[test]
+    fn test_ext_apk() {
+        assert_eq!(categorize_extension("app.apk"), FileCategory::Software);
+    }
+
+    #[test]
+    fn test_ext_xapk() {
+        assert_eq!(categorize_extension("app.xapk"), FileCategory::Software);
+    }
+
+    #[test]
+    fn test_ext_ipa() {
+        assert_eq!(categorize_extension("app.ipa"), FileCategory::Software);
+    }
+
+    #[test]
+    fn test_mime_android_package() {
+        assert_eq!(
+            categorize_mime("application/vnd.android.package-archive"),
+            FileCategory::Software,
         );
     }
 }
