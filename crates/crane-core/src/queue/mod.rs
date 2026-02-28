@@ -508,14 +508,13 @@ impl QueueManager {
                                 .and_then(|e| e.to_str())
                                 .map(|e| !e.is_empty() && e.len() <= 10)
                                 .unwrap_or(false);
-                            let new_filename =
-                                if (!current_has_ext || dl.filename == "download")
-                                    && analysis.filename != "download"
-                                {
-                                    analysis.filename.clone()
-                                } else {
-                                    dl.filename.clone()
-                                };
+                            let new_filename = if (!current_has_ext || dl.filename == "download")
+                                && analysis.filename != "download"
+                            {
+                                analysis.filename.clone()
+                            } else {
+                                dl.filename.clone()
+                            };
                             let new_save_path = PathBuf::from(
                                 Path::new(&dl.save_path)
                                     .parent()

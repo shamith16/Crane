@@ -633,8 +633,7 @@ mod tests {
 
     #[test]
     fn test_extract_filename_ignores_non_filename_params() {
-        let url =
-            url::Url::parse("https://example.com/installer.pkg?ref=homepage&id=42").unwrap();
+        let url = url::Url::parse("https://example.com/installer.pkg?ref=homepage&id=42").unwrap();
         assert_eq!(extract_filename_from_url(&url), "installer.pkg");
     }
 
