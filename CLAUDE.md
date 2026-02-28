@@ -122,6 +122,7 @@ TOML at `{dirs::config_dir()}/crane/config.toml`. Sections: General, Downloads (
 ## Git & Commit Rules
 
 - **Small, focused commits** — one logical change per commit.
+- **Verify CI locally before pushing.** Run `cargo fmt --all -- --check && cargo clippy --workspace && cargo test -p crane-core -p crane-native-host` and confirm all pass before committing and pushing. Do not push code that breaks CI.
 
 ## Key Rust Crates
 
