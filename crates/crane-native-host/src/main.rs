@@ -206,7 +206,17 @@ fn handle_download(msg: &serde_json::Value, db: &Database, save_dir: &str) -> se
 
     let raw_filename = match extension_filename {
         Some(name) if has_file_extension(&name) => name,
-        _ => extract_filename_from_url_str(url_str),
+        Some(name) => {
+            // Extension-provided name has no file extension — check if the URL
+            // can give us a better name (e.g. base64-encoded _fn query param)
+            let url_name = extract_filename_from_url_str(url_str);
+            if has_file_extension(&url_name) {
+                url_name
+            } else {
+                name // URL isn't better, keep the extension-provided name
+            }
+        }
+        None => extract_filename_from_url_str(url_str),
     };
     let filename = sanitize_filename(&raw_filename);
 
